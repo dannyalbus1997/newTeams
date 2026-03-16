@@ -1,0 +1,44 @@
+{
+  "name": "teams-meeting-summary",
+  "version": "1.0.0",
+  "description": "Microsoft Teams Meeting Summary Application - AI-powered transcript analysis and PDF report generation",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "overrides": {
+    "chokidar": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "keywords": [
+    "teams",
+    "meeting",
+    "summary",
+    "transcript",
+    "ai",
+    "azure",
+    "graph-api"
+  ],
+  "author": "",
+  "license": "MIT"
+}

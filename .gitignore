@@ -1,0 +1,235 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Production
+dist/
+build/
+.next/
+out/
+*.tgz
+
+# Development
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+.sublime-project
+.metals/
+
+# Editor directories and files
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+*.lnk
+.directory
+ehthumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_esm/
+.rts2_cache_umd/
+
+# Testing
+.nyc_output/
+coverage/
+.jest/
+.mocha/
+test-results/
+junit.xml
+
+# Misc
+.cache
+.parcel-cache
+dist/
+.cache/
+.vuepress/dist
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.venv
+venv/
+ENV/
+.vscode-test
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# Docker
+.dockerignore
+
+# Build artifacts
+tsconfig.tsbuildinfo
+*.d.ts
+*.js.map
+
+# MongoDB
+*.mongodb
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+*.orig
+
+# NestJS specific
+dist/
+node_modules/
+.nest-cli.json
+
+# Next.js specific
+.next/
+out/
+.vercel
+.turbo
+.turboignore
+.turbo/
+
+# Certificates
+*.pem
+*.crt
+*.key
+*.cer
+
+# Uploads/Files
+uploads/
+public/uploads/
+downloads/
+temp/
+tmp/
+
+# Backup files
+*.backup
+*.bak
+backup/
+
+# Lock files (optional - uncomment if you prefer not to commit lock files)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Environment samples (generated files)
+.env.sample
+.env.defaults
+
+# IDE generated files
+.idea/
+.vscode/
+*.sublime-text-project
+*.sublime-text-workspace
+
+# Compiled output
+dist/
+build/
+*.bundle.*
+
+# Sensitive files
+*.key
+*.pem
+.ssh/
+credentials.json
+secrets.json
+.aws/
+
+# CI/CD
+.github/workflows/*.log
+.gitlab-ci.log
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn
+.yarn/install-state.gz
+
+# dotenv environment variables files
+.env*.local
+
+# Turbo
+.turbo
+
+# TypeScript
+*.tsbuildinfo
+
+# Node
+node_modules/
+package-lock.json~
+
+# Generated files
+generated/
+codegen/
+
+# Local development
+local/
+dev/
+
+# Storybook
+storybook-static/
+
+# Cypress
+cypress/screenshots/
+cypress/videos/
+
+# IDE extensions
+.pylintrc
+
+# Private keys and credentials
+private/
+secrets/
+.private/
