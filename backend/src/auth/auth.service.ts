@@ -46,14 +46,10 @@ export class AuthService {
       infer: true,
     }) || '';
 
-    this.scopes = [
-      'User.Read',
-      'Calendars.Read',
-      'OnlineMeetings.Read',
-      'OnlineMeetingTranscript.Read.All',
-      'OnlineMeetingRecording.Read.All',
-      'offline_access',
-    ];
+    // Use Microsoft's recommended .default scope so the token
+    // matches the permissions configured on the app registration.
+    // This works with app-permission style configuration.
+    this.scopes = ['https://graph.microsoft.com/.default'];
 
     this.cca = new ConfidentialClientApplication({
       auth: {
