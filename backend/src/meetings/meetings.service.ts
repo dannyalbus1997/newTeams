@@ -85,7 +85,7 @@ export class MeetingsService {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const ninetyDaysLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-      const [calendarEvents, recordings] = await Promise.all([
+      const [calendarEvents, onlineMeetings] = await Promise.all([
         this.microsoftGraphService.getCalendarEventsForUser(
           appAccessToken,
           user.microsoftId,
@@ -109,17 +109,38 @@ export class MeetingsService {
       });
 
       for (const event of teamsCalendarEvents) {
-        const recordingAvailable = recordings.some(
-          (r: any) => r.meetingId === event.id || r.subject === event.subject,
+        const eventStart = new Date(event.start.dateTime).getTime();
+        const eventJoinUrl = event.onlineMeetingUrl || (event as any).onlineMeeting?.joinUrl;
+        const matchingOnlineMeeting =
+          (eventJoinUrl &&
+            onlineMeetings.find(
+              (om: any) => (om.joinWebUrl || om.joinUrl) === eventJoinUrl,
+            )) ||
+          onlineMeetings.find(
+            (om: any) =>
+              om.subject === event.subject &&
+              Math.abs(new Date(om.startDateTime).getTime() - eventStart) < 60_000,
+          );
+        const onlineMeetingId = matchingOnlineMeeting?.id ?? event.id;
+
+        if (matchingOnlineMeeting && event.id !== onlineMeetingId) {
+          await this.meetingModel.updateMany(
+            { microsoftMeetingId: event.id, userId: new Types.ObjectId(userId) },
+            { $set: { microsoftMeetingId: onlineMeetingId, updatedAt: new Date() } },
+          );
+        }
+
+        const recordingAvailable = onlineMeetings.some(
+          (r: any) => r.id === onlineMeetingId || r.subject === event.subject,
         );
 
         const hasTranscript = event.isOnlineMeeting || !!event.onlineMeetingUrl;
 
         const meeting = await this.meetingModel.findOneAndUpdate(
-          { microsoftMeetingId: event.id },
+          { microsoftMeetingId: onlineMeetingId },
           {
             userId: new Types.ObjectId(userId),
-            microsoftMeetingId: event.id,
+            microsoftMeetingId: onlineMeetingId,
             subject: event.subject,
             organizer: {
               name: event.organizer?.emailAddress?.name || 'Unknown',

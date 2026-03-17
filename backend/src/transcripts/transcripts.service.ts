@@ -113,7 +113,7 @@ export class TranscriptsService {
       }
 
       const meeting = await this.meetingsService.getMeetingById(userId, meetingId);
-      const microsoftMeetingId = meeting.microsoftMeetingId;
+      let microsoftMeetingId = meeting.microsoftMeetingId;
 
       const existingTranscript = await this.transcriptModel.findOne({
         meetingId: new Types.ObjectId(meetingId),
@@ -125,6 +125,17 @@ export class TranscriptsService {
       }
 
       const accessToken = await this.usersService.getDecryptedAccessToken(user);
+
+      if (
+        microsoftMeetingId.startsWith('AAMk') &&
+        meeting.joinUrl
+      ) {
+        const resolvedId = await this.microsoftGraphService.getOnlineMeetingIdByJoinUrl(
+          accessToken,
+          meeting.joinUrl,
+        );
+        if (resolvedId) microsoftMeetingId = resolvedId;
+      }
 
       let content = '';
       let structuredContent: StructuredEntry[] = [];

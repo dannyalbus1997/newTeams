@@ -50,7 +50,11 @@ export class AuthService {
     // with user-level permissions. The /me/* Graph endpoints require
     // delegated access — .default with a confidential client returns
     // an app-only token which cannot call /me/ endpoints.
-    this.scopes = ['https://graph.microsoft.com/.default'];
+    this.scopes = [
+      'User.Read',
+      'offline_access',
+      'OnlineMeetingTranscript.Read.All',
+    ];
 
     this.cca = new ConfidentialClientApplication({
       auth: {

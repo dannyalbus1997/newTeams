@@ -7,7 +7,8 @@ interface OnlineMeeting {
   createdDateTime: string;
   startDateTime: string;
   endDateTime: string;
-  joinUrl: string;
+  joinUrl?: string;
+  joinWebUrl?: string;
   participants?: Participant[];
   isReminderOn?: boolean;
 }
@@ -162,6 +163,30 @@ export class MicrosoftGraphService {
     } catch (error) {
       this.logger.error('Failed to fetch online meetings', error);
       return [];
+    }
+  }
+
+  /**
+   * Resolve online meeting id from join URL (e.g. when only calendar event id is stored).
+   * Returns the online meeting id or null.
+   */
+  async getOnlineMeetingIdByJoinUrl(
+    accessToken: string,
+    joinWebUrl: string,
+  ): Promise<string | null> {
+    if (!joinWebUrl) return null;
+    try {
+      const client = this.getGraphClient(accessToken);
+      const escaped = joinWebUrl.replace(/'/g, "''");
+      const result = await client
+        .api('/me/onlineMeetings')
+        .query({ $filter: `joinWebUrl eq '${escaped}'` })
+        .get();
+      const meetings = result?.value as OnlineMeeting[] | undefined;
+      return meetings?.length ? meetings[0].id : null;
+    } catch (error) {
+      this.logger.debug('Could not resolve online meeting by joinUrl', error);
+      return null;
     }
   }
 
