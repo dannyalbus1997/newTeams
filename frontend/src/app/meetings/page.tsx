@@ -1,50 +1,55 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, Stack, Typography } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import MeetingFilters from '@/components/meetings/MeetingFilters';
 import MeetingList from '@/components/meetings/MeetingList';
-import { useMeetingsStore } from '@/hooks/useMeetingsStore';
+import { useGetMeetingsQuery, useSyncMeetingsMutation } from '@/store/api/meetingsApi';
 import { ROUTES, PAGINATION } from '@/lib/constants';
 import ErrorAlert from '@/components/common/ErrorAlert';
 import { GetMeetingsParams } from '@/types';
 
 export default function MeetingsPage() {
   const router = useRouter();
-  const {
-    meetings,
-    isLoading,
-    error,
-    pagination,
-    clearError,
-    fetchMeetings,
-    syncMeetings,
-  } = useMeetingsStore();
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [page, setPage] = useState(PAGINATION.DEFAULT_PAGE);
   const [filters, setFilters] = useState<GetMeetingsParams>({});
 
-  useEffect(() => {
-    fetchMeetings(PAGINATION.DEFAULT_PAGE, PAGINATION.DEFAULT_LIMIT);
-  }, []);
+  const { data: meetingsData, isLoading, error } = useGetMeetingsQuery({
+    page,
+    limit: PAGINATION.DEFAULT_LIMIT,
+    search: filters.search,
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    status: filters.status,
+  });
+  const [syncMeetings, { isLoading: isSyncing }] = useSyncMeetingsMutation();
+
+  const meetings = meetingsData?.data || [];
+  const pagination = meetingsData
+    ? { page: meetingsData.page, totalPages: meetingsData.totalPages }
+    : { page: 1, totalPages: 0 };
 
   const handleFilter = (newFilters: GetMeetingsParams) => {
     setFilters(newFilters);
-    fetchMeetings(1, PAGINATION.DEFAULT_LIMIT, newFilters.search);
+    setPage(1);
   };
 
   const handleSync = async () => {
-    setIsSyncing(true);
-    await syncMeetings();
-    setIsSyncing(false);
+    try {
+      await syncMeetings().unwrap();
+    } catch (error) {
+      console.error('Sync failed:', error);
+    }
   };
 
-  const handlePageChange = (page: number) => {
-    fetchMeetings(page, PAGINATION.DEFAULT_LIMIT, filters.search);
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
   };
 
   const handleViewDetails = (id: string) => {
+    if (!id) return;
     router.push(ROUTES.MEETING_DETAIL(id));
   };
 
@@ -61,7 +66,7 @@ export default function MeetingsPage() {
           </Typography>
         </Box>
 
-        {error && <ErrorAlert error={error} onDismiss={clearError} showDismiss />}
+        {error && <ErrorAlert error="Failed to load meetings" />}
 
         {/* Filters */}
         <MeetingFilters onFilter={handleFilter} isLoading={isLoading} />

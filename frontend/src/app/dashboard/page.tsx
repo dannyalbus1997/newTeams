@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Grid,
   Card,
@@ -13,10 +13,9 @@ import {
   Stack,
 } from '@mui/material';
 import MainLayout from '@/components/layout/MainLayout';
-import { useMeetingsStore } from '@/hooks/useMeetingsStore';
+import { useGetMeetingsQuery, useSyncMeetingsMutation } from '@/store/api/meetingsApi';
 import { useRouter } from 'next/navigation';
-import { ROUTES, PAGINATION } from '@/lib/constants';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+import { ROUTES } from '@/lib/constants';
 import ErrorAlert from '@/components/common/ErrorAlert';
 import EventIcon from '@mui/icons-material/Event';
 import SummarizeIcon from '@mui/icons-material/Summarize';
@@ -26,24 +25,18 @@ import { formatDateTime, formatDuration, calculateDuration } from '@/lib/utils';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const {
-    meetings,
-    isLoading,
-    error,
-    clearError,
-    fetchMeetings,
-    syncMeetings,
-  } = useMeetingsStore();
-  const [isSyncing, setIsSyncing] = useState(false);
+  const { data: meetingsData, isLoading, error, refetch } = useGetMeetingsQuery({ page: 1, limit: 5 });
+  const [syncMeetings, { isLoading: isSyncing }] = useSyncMeetingsMutation();
 
-  useEffect(() => {
-    fetchMeetings(1, 5);
-  }, []);
+  const meetings = meetingsData?.data || [];
 
   const handleSync = async () => {
-    setIsSyncing(true);
-    await syncMeetings();
-    setIsSyncing(false);
+    try {
+      await syncMeetings().unwrap();
+      refetch();
+    } catch (error) {
+      console.error('Sync failed:', error);
+    }
   };
 
   const handleViewMeeting = (id: string) => {
@@ -54,7 +47,7 @@ export default function DashboardPage() {
   const summariesGenerated = meetings.filter(
     (m) => m.summaryStatus === 'completed'
   ).length;
-  const pendingActionItems = 0; // Would come from summaries
+  const pendingActionItems = 0;
 
   const recentMeetings = meetings.slice(0, 5);
 
@@ -71,7 +64,7 @@ export default function DashboardPage() {
           </Typography>
         </Box>
 
-        {error && <ErrorAlert error={error} onDismiss={clearError} showDismiss />}
+        {error && <ErrorAlert error="Failed to load meetings" />}
 
         {/* Stats Cards */}
         <Grid container spacing={2}>

@@ -9,6 +9,7 @@ import {
 } from './schemas/meeting.schema';
 import { MeetingQueryDto } from './dto/meeting-query.dto';
 import { UsersService } from '@/users/users.service';
+import { AuthService } from '@/auth/auth.service';
 import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service';
 import { PaginatedResponse } from '@/common/interfaces/pagination.interface';
 
@@ -19,8 +20,52 @@ export class MeetingsService {
   constructor(
     @InjectModel(Meeting.name) private meetingModel: Model<MeetingDocument>,
     private usersService: UsersService,
+    private authService: AuthService,
     private microsoftGraphService: MicrosoftGraphService,
   ) {}
+
+  /**
+   * Get a valid (non-expired) Microsoft access token for the user.
+   * Automatically refreshes the token if it has expired.
+   */
+  private async getValidAccessToken(userId: string): Promise<string> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    const now = new Date();
+    // Add 5-minute buffer so we refresh before actual expiry
+    const bufferMs = 5 * 60 * 1000;
+    const isExpired = user.tokenExpiresAt.getTime() - bufferMs < now.getTime();
+
+    if (isExpired) {
+      this.logger.log(`Access token expired for user ${userId}, refreshing...`);
+      try {
+        const refreshToken = await this.usersService.getDecryptedRefreshToken(user);
+        const tokens = await this.authService.refreshAccessToken(refreshToken);
+
+        const expiresAt = new Date();
+        expiresAt.setSeconds(expiresAt.getSeconds() + tokens.expiresIn);
+
+        await this.usersService.updateTokens(
+          userId,
+          tokens.accessToken,
+          tokens.refreshToken,
+          expiresAt,
+        );
+
+        return tokens.accessToken;
+      } catch (error) {
+        this.logger.error(`Token refresh failed for user ${userId}`, error);
+        throw new BadRequestException(
+          'Microsoft session expired. Please sign out and sign in again.',
+        );
+      }
+    }
+
+    return this.usersService.getDecryptedAccessToken(user);
+  }
 
   async syncMeetings(userId: string): Promise<number> {
     try {
@@ -28,20 +73,29 @@ export class MeetingsService {
       if (!user) {
         throw new BadRequestException('User not found');
       }
+      if (!user.microsoftId) {
+        throw new BadRequestException(
+          'User has no Microsoft identity. Sign in again with Microsoft.',
+        );
+      }
 
-      const accessToken = await this.usersService.getDecryptedAccessToken(user);
+      const appAccessToken = await this.authService.getAppAccessToken();
 
       const now = new Date();
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       const ninetyDaysLater = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
 
       const [calendarEvents, recordings] = await Promise.all([
-        this.microsoftGraphService.getCalendarEvents(
-          accessToken,
+        this.microsoftGraphService.getCalendarEventsForUser(
+          appAccessToken,
+          user.microsoftId,
           thirtyDaysAgo,
           ninetyDaysLater,
         ),
-        this.microsoftGraphService.getOnlineMeetings(accessToken),
+        this.microsoftGraphService.getOnlineMeetingsForUser(
+          appAccessToken,
+          user.microsoftId,
+        ),
       ]);
 
       let syncedCount = 0;
@@ -236,13 +290,8 @@ export class MeetingsService {
     meetingId: string,
   ): Promise<{ available: boolean; status: TranscriptStatus }> {
     try {
-      const user = await this.usersService.findById(userId);
-      if (!user) {
-        throw new BadRequestException('User not found');
-      }
-
+      const accessToken = await this.getValidAccessToken(userId);
       const meeting = await this.getMeetingById(userId, meetingId);
-      const accessToken = await this.usersService.getDecryptedAccessToken(user);
 
       const isAvailable = await this.microsoftGraphService.checkTranscriptAvailability(
         accessToken,

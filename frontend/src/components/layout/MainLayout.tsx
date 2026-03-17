@@ -4,7 +4,8 @@ import React, { useEffect, ReactNode } from 'react';
 import { Box, Container } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import Navbar from './Navbar';
-import { useAuthStore } from '@/hooks/useAuthStore';
+import { useAppSelector } from '@/store/hooks';
+import { useLazyGetCurrentUserQuery } from '@/store/api/authApi';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { ROUTES } from '@/lib/constants';
 
@@ -18,12 +19,16 @@ export default function MainLayout({
   containerMaxWidth = 'lg',
 }: MainLayoutProps) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
+  const [triggerGetUser] = useLazyGetCurrentUserQuery();
 
   useEffect(() => {
     const initAuth = async () => {
       if (!isAuthenticated && !isLoading) {
-        await checkAuth();
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        if (token) {
+          await triggerGetUser();
+        }
       }
     };
 

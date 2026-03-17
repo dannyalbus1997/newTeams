@@ -4,6 +4,7 @@ import { TranscriptsService } from './transcripts.service';
 import { TranscriptsController } from './transcripts.controller';
 import { Transcript, TranscriptSchema } from './schemas/transcript.schema';
 import { UsersModule } from '@/users/users.module';
+import { MeetingsModule } from '@/meetings/meetings.module';
 import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service';
 
 @Module({
@@ -12,6 +13,7 @@ import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service
       { name: Transcript.name, schema: TranscriptSchema },
     ]),
     UsersModule,
+    MeetingsModule,
   ],
   providers: [TranscriptsService, MicrosoftGraphService],
   controllers: [TranscriptsController],

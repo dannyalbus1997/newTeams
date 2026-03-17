@@ -25,10 +25,11 @@ import SearchIcon from '@mui/icons-material/Search';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/hooks/useAuthStore';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { logout } from '@/store/slices/authSlice';
+import { useLogoutUserMutation } from '@/store/api/authApi';
 import { getInitials } from '@/lib/utils';
 import { ROUTES } from '@/lib/constants';
-import { authService } from '@/services/auth.service';
 
 const navItems = [
   { label: 'Dashboard', icon: DashboardIcon, href: ROUTES.DASHBOARD },
@@ -39,7 +40,9 @@ const navItems = [
 
 export default function Navbar() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const dispatch = useAppDispatch();
+  const user = useAppSelector((state) => state.auth.user);
+  const [logoutUser] = useLogoutUserMutation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -53,12 +56,12 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     try {
-      await authService.logout();
-      logout();
-      router.push(ROUTES.LOGIN);
+      await logoutUser().unwrap();
     } catch (error) {
       console.error('Logout failed:', error);
     }
+    dispatch(logout());
+    router.push(ROUTES.LOGIN);
     handleMenuClose();
   };
 

@@ -2,13 +2,13 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/hooks/useAuthStore';
+import { useAppSelector } from '@/store/hooks';
 import { ROUTES } from '@/lib/constants';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
     if (!isLoading) {

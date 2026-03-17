@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Transcript, TranscriptDocument, TranscriptSource } from './schemas/transcript.schema';
 import { UsersService } from '@/users/users.service';
+import { MeetingsService } from '@/meetings/meetings.service';
 import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service';
 
 interface StructuredEntry {
@@ -19,6 +20,7 @@ export class TranscriptsService {
     @InjectModel(Transcript.name)
     private transcriptModel: Model<TranscriptDocument>,
     private usersService: UsersService,
+    private meetingsService: MeetingsService,
     private microsoftGraphService: MicrosoftGraphService,
   ) {}
 
@@ -110,6 +112,9 @@ export class TranscriptsService {
         throw new BadRequestException('User not found');
       }
 
+      const meeting = await this.meetingsService.getMeetingById(userId, meetingId);
+      const microsoftMeetingId = meeting.microsoftMeetingId;
+
       const existingTranscript = await this.transcriptModel.findOne({
         meetingId: new Types.ObjectId(meetingId),
         userId: new Types.ObjectId(userId),
@@ -126,14 +131,14 @@ export class TranscriptsService {
 
       const transcripts = await this.microsoftGraphService.getMeetingTranscripts(
         accessToken,
-        meetingId,
+        microsoftMeetingId,
       );
 
       if (transcripts && transcripts.length > 0) {
         const transcript = transcripts[0];
         content = await this.microsoftGraphService.getTranscriptContent(
           accessToken,
-          meetingId,
+          microsoftMeetingId,
           transcript.id,
         );
 

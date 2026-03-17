@@ -55,9 +55,6 @@ export default function MeetingDetail({
     meeting.endDateTime
   );
 
-  const canFetchTranscript =
-    meeting.transcriptStatus === 'unavailable' ||
-    meeting.transcriptStatus === 'failed';
   const canGenerateSummary =
     meeting.transcriptStatus === 'completed' &&
     (meeting.summaryStatus === 'not_generated' || meeting.summaryStatus === 'failed');
@@ -200,14 +197,17 @@ export default function MeetingDetail({
             </Button>
           </Stack>
 
-          {canFetchTranscript && onFetchTranscript && (
+          {onFetchTranscript && (
             <Button
               variant="outlined"
               color="primary"
               fullWidth
               onClick={onFetchTranscript}
+              disabled={meeting.transcriptStatus === 'pending' || meeting.transcriptStatus === 'processing'}
             >
-              Fetch Transcript
+              {meeting.transcriptStatus === 'completed' || meeting.transcriptStatus === 'fetched'
+                ? 'Re-fetch Transcript'
+                : 'Fetch Transcript'}
             </Button>
           )}
 

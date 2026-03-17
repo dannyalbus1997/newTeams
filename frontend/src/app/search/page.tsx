@@ -9,12 +9,7 @@ import {
   CardContent,
   CardActions,
   Button,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
   CircularProgress,
-  Chip,
 } from '@mui/material';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
@@ -22,52 +17,28 @@ import SearchBar from '@/components/common/SearchBar';
 import EmptyState from '@/components/common/EmptyState';
 import ErrorAlert from '@/components/common/ErrorAlert';
 import SearchIcon from '@mui/icons-material/Search';
-import { summariesService } from '@/services/summaries.service';
+import { useLazySearchSummariesQuery } from '@/store/api/summariesApi';
 import { ROUTES } from '@/lib/constants';
-
-interface SearchResult {
-  meetingId: string;
-  meetingSubject: string;
-  matches: string[];
-}
 
 export default function SearchPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const [triggerSearch, { data: searchData, isLoading, error }] =
+    useLazySearchSummariesQuery();
+
+  const results = searchData?.results || [];
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
-      setResults([]);
       setHasSearched(false);
-      setError(null);
       return;
     }
 
     setSearchQuery(query);
-    setIsLoading(true);
-    setError(null);
     setHasSearched(true);
-
-    try {
-      const response = await summariesService.searchSummaries(query, 1, 20);
-      if (response.success && response.data) {
-        setResults(response.data.results || []);
-      } else {
-        setError(response.error || 'Search failed');
-        setResults([]);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'An error occurred during search'
-      );
-      setResults([]);
-    } finally {
-      setIsLoading(false);
-    }
+    triggerSearch({ query, page: 1, limit: 20 });
   };
 
   const handleViewMeeting = (meetingId: string) => {
@@ -99,7 +70,7 @@ export default function SearchPage() {
           </CardContent>
         </Card>
 
-        {error && <ErrorAlert error={error} onDismiss={() => setError(null)} showDismiss />}
+        {error && <ErrorAlert error="Search failed" />}
 
         {/* Results */}
         {isLoading ? (

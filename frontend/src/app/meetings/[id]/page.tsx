@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Box, Stack, Typography, Tabs, Tab, CircularProgress } from '@mui/material';
 import { useRouter, useParams } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
@@ -10,10 +10,20 @@ import TranscriptUpload from '@/components/transcripts/TranscriptUpload';
 import SummaryView from '@/components/summaries/SummaryView';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorAlert from '@/components/common/ErrorAlert';
-import { meetingsService } from '@/services/meetings.service';
+import { useGetMeetingByIdQuery } from '@/store/api/meetingsApi';
+import {
+  useGetTranscriptQuery,
+  useFetchTranscriptFromMeetingMutation,
+} from '@/store/api/transcriptsApi';
+import {
+  useGetSummaryQuery,
+  useGenerateSummaryMutation,
+  useRegenerateSummaryMutation,
+  useUpdateActionItemMutation,
+} from '@/store/api/summariesApi';
 import { transcriptsService } from '@/services/transcripts.service';
 import { summariesService } from '@/services/summaries.service';
-import { Meeting, Transcript, Summary, ActionItem } from '@/types';
+import { ActionItem } from '@/types';
 import { ROUTES } from '@/lib/constants';
 
 interface TabPanelProps {
@@ -40,99 +50,53 @@ function TabPanel(props: TabPanelProps) {
 
 export default function MeetingDetailPage() {
   const params = useParams();
-  const meetingId = params.id as string;
+  const meetingId = (params?.id as string) ?? '';
   const router = useRouter();
   const [tabValue, setTabValue] = useState(0);
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [transcript, setTranscript] = useState<Transcript | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [isLoadingMeeting, setIsLoadingMeeting] = useState(true);
-  const [isLoadingTranscript, setIsLoadingTranscript] = useState(false);
-  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
-  const [transcriptError, setTranscriptError] = useState<string | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  const isInvalidId = !meetingId || meetingId === 'undefined';
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploadingTranscript, setIsUploadingTranscript] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  useEffect(() => {
-    loadMeeting();
-  }, [meetingId]);
+  // RTK Query hooks (skip request when id is invalid)
+  const {
+    data: meeting,
+    isLoading: isLoadingMeeting,
+  } = useGetMeetingByIdQuery(meetingId, { skip: isInvalidId });
 
-  const loadMeeting = async () => {
-    setIsLoadingMeeting(true);
-    try {
-      const response = await meetingsService.getMeetingById(meetingId);
-      if (response.success && response.data) {
-        setMeeting(response.data);
-      }
-    } catch (error) {
-      console.error('Failed to load meeting:', error);
-    } finally {
-      setIsLoadingMeeting(false);
-    }
-  };
+  const {
+    data: transcript,
+    isLoading: isLoadingTranscript,
+    error: transcriptError,
+    refetch: refetchTranscript,
+  } = useGetTranscriptQuery(meetingId, { skip: !meeting });
 
-  const loadTranscript = async () => {
-    setIsLoadingTranscript(true);
-    setTranscriptError(null);
-    try {
-      const response = await transcriptsService.getTranscript(meetingId);
-      if (response.success && response.data) {
-        setTranscript(response.data);
-      } else {
-        setTranscriptError(response.error || 'Failed to load transcript');
-      }
-    } catch (error) {
-      setTranscriptError(
-        error instanceof Error ? error.message : 'Failed to load transcript'
-      );
-    } finally {
-      setIsLoadingTranscript(false);
-    }
-  };
+  const {
+    data: summary,
+    isLoading: isLoadingSummary,
+    error: summaryError,
+  } = useGetSummaryQuery(meetingId, { skip: !meeting });
 
-  const loadSummary = async () => {
-    setIsLoadingSummary(true);
-    setSummaryError(null);
-    try {
-      const response = await summariesService.getSummary(meetingId);
-      if (response.success && response.data) {
-        setSummary(response.data);
-      } else {
-        setSummaryError(response.error || 'Failed to load summary');
-      }
-    } catch (error) {
-      setSummaryError(
-        error instanceof Error ? error.message : 'Failed to load summary'
-      );
-    } finally {
-      setIsLoadingSummary(false);
-    }
-  };
+  const [fetchTranscriptFromMeeting, { isLoading: isFetchingTranscript }] =
+    useFetchTranscriptFromMeetingMutation();
+  const [generateSummary, { isLoading: isGeneratingSummary }] =
+    useGenerateSummaryMutation();
+  const [regenerateSummary, { isLoading: isRegenerating }] =
+    useRegenerateSummaryMutation();
+  const [updateActionItem] = useUpdateActionItemMutation();
 
   const handleFetchTranscript = async () => {
-    setIsLoadingTranscript(true);
-    setTranscriptError(null);
     try {
-      const response = await transcriptsService.fetchTranscript(meetingId);
-      if (response.success && response.data) {
-        setTranscript(response.data);
-      } else {
-        setTranscriptError(response.error || 'Failed to fetch transcript');
-      }
+      await fetchTranscriptFromMeeting(meetingId).unwrap();
     } catch (error) {
-      setTranscriptError(
-        error instanceof Error ? error.message : 'Failed to fetch transcript'
-      );
-    } finally {
-      setIsLoadingTranscript(false);
+      console.error('Failed to fetch transcript:', error);
     }
   };
 
   const handleUploadTranscript = async (file: File) => {
     setIsUploadingTranscript(true);
-    setTranscriptError(null);
+    setUploadError(null);
     setUploadProgress(0);
     try {
       const response = await transcriptsService.uploadTranscript(
@@ -147,12 +111,12 @@ export default function MeetingDetailPage() {
       );
       if (response.success) {
         setUploadProgress(100);
-        await loadTranscript();
+        refetchTranscript();
       } else {
-        setTranscriptError(response.error || 'Failed to upload transcript');
+        setUploadError(response.error || 'Failed to upload transcript');
       }
     } catch (error) {
-      setTranscriptError(
+      setUploadError(
         error instanceof Error ? error.message : 'Failed to upload transcript'
       );
     } finally {
@@ -162,40 +126,18 @@ export default function MeetingDetailPage() {
   };
 
   const handleGenerateSummary = async () => {
-    setIsGeneratingSummary(true);
-    setSummaryError(null);
     try {
-      const response = await summariesService.generateSummary(meetingId);
-      if (response.success && response.data) {
-        setSummary(response.data);
-      } else {
-        setSummaryError(response.error || 'Failed to generate summary');
-      }
+      await generateSummary(meetingId).unwrap();
     } catch (error) {
-      setSummaryError(
-        error instanceof Error ? error.message : 'Failed to generate summary'
-      );
-    } finally {
-      setIsGeneratingSummary(false);
+      console.error('Failed to generate summary:', error);
     }
   };
 
   const handleRegenerateSummary = async () => {
-    setIsGeneratingSummary(true);
-    setSummaryError(null);
     try {
-      const response = await summariesService.regenerateSummary(meetingId);
-      if (response.success && response.data) {
-        setSummary(response.data);
-      } else {
-        setSummaryError(response.error || 'Failed to regenerate summary');
-      }
+      await regenerateSummary({ meetingId }).unwrap();
     } catch (error) {
-      setSummaryError(
-        error instanceof Error ? error.message : 'Failed to regenerate summary'
-      );
-    } finally {
-      setIsGeneratingSummary(false);
+      console.error('Failed to regenerate summary:', error);
     }
   };
 
@@ -204,14 +146,7 @@ export default function MeetingDetailPage() {
     data: Partial<ActionItem>
   ) => {
     try {
-      const response = await summariesService.updateActionItem(
-        meetingId,
-        itemIndex,
-        data
-      );
-      if (response.success && response.data) {
-        setSummary(response.data);
-      }
+      await updateActionItem({ meetingId, itemIndex, data }).unwrap();
     } catch (error) {
       console.error('Failed to update action item:', error);
     }
@@ -233,6 +168,14 @@ export default function MeetingDetailPage() {
     }
   };
 
+  if (isInvalidId) {
+    return (
+      <MainLayout>
+        <ErrorAlert error="Invalid meeting link. Please open a meeting from the list." />
+      </MainLayout>
+    );
+  }
+
   if (isLoadingMeeting) {
     return <LoadingSpinner />;
   }
@@ -252,9 +195,8 @@ export default function MeetingDetailPage() {
         <Box>
           <Typography
             variant="h4"
-            sx={{ fontWeight: 700, mb: 1 }}
+            sx={{ cursor: 'pointer', color: 'primary.main', '&:hover': { textDecoration: 'underline' }, fontWeight: 700, mb: 1 }}
             onClick={() => router.push(ROUTES.MEETINGS)}
-            sx={{ cursor: 'pointer', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
           >
             ← Meetings
           </Typography>
@@ -280,8 +222,12 @@ export default function MeetingDetailPage() {
 
         {/* Tab Panels */}
         <TabPanel value={tabValue} index={1}>
-          {transcriptError && (
-            <ErrorAlert error={transcriptError} onDismiss={() => setTranscriptError(null)} showDismiss />
+          {(uploadError || transcriptError) && (
+            <ErrorAlert
+              error={uploadError || 'Failed to load transcript'}
+              onDismiss={() => setUploadError(null)}
+              showDismiss
+            />
           )}
 
           {!transcript && !isLoadingTranscript && meeting.transcriptStatus === 'pending' && (
@@ -298,7 +244,7 @@ export default function MeetingDetailPage() {
               onUpload={handleUploadTranscript}
               isLoading={isUploadingTranscript}
               uploadProgress={uploadProgress}
-              error={transcriptError}
+              error={uploadError}
             />
           )}
 
@@ -309,7 +255,7 @@ export default function MeetingDetailPage() {
 
         <TabPanel value={tabValue} index={2}>
           {summaryError && (
-            <ErrorAlert error={summaryError} onDismiss={() => setSummaryError(null)} showDismiss />
+            <ErrorAlert error="Failed to load summary" />
           )}
 
           {!summary && !isLoadingSummary && meeting.summaryStatus === 'not_generated' && (
@@ -333,7 +279,7 @@ export default function MeetingDetailPage() {
             <SummaryView
               summary={summary}
               isLoading={isLoadingSummary}
-              isGenerating={isGeneratingSummary}
+              isGenerating={isGeneratingSummary || isRegenerating}
               onRegenerate={handleRegenerateSummary}
               onUpdateActionItem={handleUpdateActionItem}
               onExportPdf={handleExportPdf}

@@ -11,29 +11,30 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next": "^14.1.0",
-    "@mui/material": "^5.14.18",
-    "@mui/icons-material": "^5.14.18",
+    "@emotion/cache": "^11.11.0",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "@emotion/cache": "^11.11.0",
+    "@mui/icons-material": "^5.14.18",
+    "@mui/material": "^5.14.18",
     "@mui/material-nextjs": "^5.15.0",
+    "@reduxjs/toolkit": "^2.11.2",
     "axios": "^1.6.5",
     "date-fns": "^3.0.0",
-    "zustand": "^4.4.1",
-    "react-hot-toast": "^2.4.1",
+    "next": "^14.1.0",
+    "next-nprogress-bar": "^2.1.1",
     "notistack": "^3.0.1",
-    "next-nprogress-bar": "^2.1.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
+    "react-redux": "^9.2.0"
   },
   "devDependencies": {
-    "typescript": "^5.3.3",
+    "@types/date-fns": "^2.6.0",
+    "@types/node": "^20.10.5",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
-    "@types/node": "^20.10.5",
-    "@types/date-fns": "^2.6.0",
     "eslint": "^8.55.0",
-    "eslint-config-next": "^14.1.0"
+    "eslint-config-next": "^14.1.0",
+    "typescript": "^5.3.3"
   }
 }

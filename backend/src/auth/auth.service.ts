@@ -46,9 +46,10 @@ export class AuthService {
       infer: true,
     }) || '';
 
-    // Use Microsoft's recommended .default scope so the token
-    // matches the permissions configured on the app registration.
-    // This works with app-permission style configuration.
+    // Use explicit delegated scopes so Microsoft returns a token
+    // with user-level permissions. The /me/* Graph endpoints require
+    // delegated access — .default with a confidential client returns
+    // an app-only token which cannot call /me/ endpoints.
     this.scopes = ['https://graph.microsoft.com/.default'];
 
     this.cca = new ConfidentialClientApplication({
@@ -58,6 +59,24 @@ export class AuthService {
         clientSecret: this.clientSecret,
       },
     });
+  }
+
+  /** App-only token for Graph calls using application permissions (e.g. sync). */
+  private static readonly APP_SCOPES = ['https://graph.microsoft.com/.default'];
+
+  async getAppAccessToken(): Promise<string> {
+    try {
+      const result = await this.cca.acquireTokenByClientCredential({
+        scopes: AuthService.APP_SCOPES,
+      });
+      if (!result?.accessToken) {
+        throw new Error('No access token in client credential response');
+      }
+      return result.accessToken;
+    } catch (error) {
+      this.logger.error('Failed to acquire app token (client credentials)', error);
+      throw error;
+    }
   }
 
   async getAuthenticationUrl(): Promise<MicrosoftAuthUrl> {

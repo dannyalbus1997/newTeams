@@ -6,7 +6,8 @@ import MainLayout from '@/components/layout/MainLayout';
 import TranscriptUpload from '@/components/transcripts/TranscriptUpload';
 import ErrorAlert from '@/components/common/ErrorAlert';
 import { transcriptsService } from '@/services/transcripts.service';
-import { ROUTES } from '@/lib/constants';
+import { useGetMeetingsQuery } from '@/store/api/meetingsApi';
+import { ROUTES, PAGINATION } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 
 export default function UploadPage() {
@@ -16,6 +17,13 @@ export default function UploadPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  const { data: meetingsData } = useGetMeetingsQuery({
+    page: 1,
+    limit: PAGINATION.MAX_LIMIT,
+  });
+
+  const meetings = meetingsData?.data || [];
 
   const handleUpload = async (file: File) => {
     if (!selectedMeetingId) {
@@ -43,10 +51,10 @@ export default function UploadPage() {
       if (response.success) {
         setUploadSuccess(true);
         setUploadProgress(100);
+        const meetingId = selectedMeetingId;
         setSelectedMeetingId('');
-        // Redirect after 2 seconds
         setTimeout(() => {
-          router.push(ROUTES.MEETING_DETAIL(selectedMeetingId));
+          router.push(ROUTES.MEETING_DETAIL(meetingId));
         }, 2000);
       } else {
         setUploadError(response.error || 'Failed to upload transcript');
@@ -88,8 +96,11 @@ export default function UploadPage() {
                 onChange={(e) => setSelectedMeetingId(e.target.value)}
               >
                 <MenuItem value="">Choose a meeting...</MenuItem>
-                <MenuItem value="meeting-1">Sample Meeting 1</MenuItem>
-                <MenuItem value="meeting-2">Sample Meeting 2</MenuItem>
+                {meetings.map((meeting) => (
+                  <MenuItem key={meeting.id} value={meeting.id}>
+                    {meeting.subject}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
             <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 1 }}>

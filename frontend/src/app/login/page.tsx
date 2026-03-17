@@ -12,14 +12,15 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
-import { useAuthStore } from '@/hooks/useAuthStore';
-import { authService } from '@/services/auth.service';
-import { ROUTES, APP_CONFIG } from '@/lib/constants';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { setAuth } from '@/store/slices/authSlice';
+import { ROUTES, APP_CONFIG, API_CONFIG } from '@/lib/constants';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, setAuth, isLoading } = useAuthStore();
+  const dispatch = useAppDispatch();
+  const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
 
   // Handle OAuth callback
   useEffect(() => {
@@ -29,14 +30,13 @@ export default function LoginPage() {
     if (token && user) {
       try {
         const userData = JSON.parse(decodeURIComponent(user));
-        authService.setAuthToken(token);
-        setAuth(userData, token);
+        dispatch(setAuth({ user: userData, token }));
         router.push(ROUTES.DASHBOARD);
       } catch (error) {
         console.error('Failed to parse user data:', error);
       }
     }
-  }, [searchParams, setAuth, router]);
+  }, [searchParams, dispatch, router]);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -46,7 +46,7 @@ export default function LoginPage() {
   }, [isAuthenticated, isLoading, router]);
 
   const handleMicrosoftLogin = () => {
-    const loginUrl = authService.getLoginUrl();
+    const loginUrl = `${API_CONFIG.BASE_URL}/auth/login`;
     window.location.href = loginUrl;
   };
 

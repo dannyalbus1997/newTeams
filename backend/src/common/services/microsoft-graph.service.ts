@@ -99,10 +99,25 @@ export class MicrosoftGraphService {
     startDate: Date,
     endDate: Date,
   ): Promise<CalendarEvent[]> {
+    return this.getCalendarEventsForUser(
+      accessToken,
+      'me',
+      startDate,
+      endDate,
+    );
+  }
+
+  /** Calendar view for a specific user (use 'me' for delegated or user id for app-only). */
+  async getCalendarEventsForUser(
+    accessToken: string,
+    userIdentifier: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<CalendarEvent[]> {
     try {
       const client = this.getGraphClient(accessToken);
       const events = await client
-        .api('/me/calendarview')
+        .api(`/users/${userIdentifier}/calendarview`)
         .query({
           startDateTime: startDate.toISOString(),
           endDateTime: endDate.toISOString(),
@@ -129,10 +144,18 @@ export class MicrosoftGraphService {
   }
 
   async getOnlineMeetings(accessToken: string): Promise<OnlineMeeting[]> {
+    return this.getOnlineMeetingsForUser(accessToken, 'me');
+  }
+
+  /** Online meetings for a specific user (use 'me' for delegated or user id for app-only). */
+  async getOnlineMeetingsForUser(
+    accessToken: string,
+    userIdentifier: string,
+  ): Promise<OnlineMeeting[]> {
     try {
       const client = this.getGraphClient(accessToken);
       const meetings = await client
-        .api('/me/onlineMeetings')
+        .api(`/users/${userIdentifier}/onlineMeetings`)
         .get();
 
       return meetings.value as OnlineMeeting[];
@@ -177,6 +200,49 @@ export class MicrosoftGraphService {
     } catch (error) {
       this.logger.error(
         `Failed to fetch transcript content for meeting ${meetingId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /** App-only: list transcripts for a user's meeting (requires OnlineMeetingTranscript.Read.All). */
+  async getMeetingTranscriptsForUser(
+    accessToken: string,
+    userMicrosoftId: string,
+    microsoftMeetingId: string,
+  ): Promise<Transcript[]> {
+    try {
+      const client = this.getGraphClient(accessToken);
+      const transcripts = await client
+        .api(`/users/${userMicrosoftId}/onlineMeetings/${microsoftMeetingId}/transcripts`)
+        .get();
+      return transcripts.value as Transcript[];
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch transcripts for user meeting ${microsoftMeetingId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /** App-only: get transcript content for a user's meeting. */
+  async getTranscriptContentForUser(
+    accessToken: string,
+    userMicrosoftId: string,
+    microsoftMeetingId: string,
+    transcriptId: string,
+  ): Promise<string> {
+    try {
+      const client = this.getGraphClient(accessToken);
+      const transcript = await client
+        .api(`/users/${userMicrosoftId}/onlineMeetings/${microsoftMeetingId}/transcripts/${transcriptId}`)
+        .get();
+      return transcript.content || '';
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch transcript content for meeting ${microsoftMeetingId}`,
         error,
       );
       throw error;
