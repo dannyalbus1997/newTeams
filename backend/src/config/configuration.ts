@@ -18,6 +18,8 @@ export interface JwtConfig {
 export interface OpenAiConfig {
   apiKey: string;
   model: string;
+  whisperModel: string;
+  maxRecordingSize: number;
 }
 
 export interface EncryptionConfig {
@@ -34,6 +36,7 @@ export interface AppConfig {
   nodeEnv: string;
   port: number;
   frontendUrl: string;
+  botCallbackUrl: string;
   database: DatabaseConfig;
   azure: AzureConfig;
   jwt: JwtConfig;
@@ -47,6 +50,7 @@ export default (): AppConfig => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '3001', 10),
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  botCallbackUrl: process.env.BOT_CALLBACK_URL || 'https://351f-115-186-174-60.ngrok-free.app/api/meeting-bot/callback',
   database: {
     uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/teams-meeting-summary',
   },
@@ -64,6 +68,8 @@ export default (): AppConfig => ({
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
     model: 'gpt-4o',
+    whisperModel: process.env.OPENAI_WHISPER_MODEL || 'whisper-1',
+    maxRecordingSize: parseInt(process.env.MAX_RECORDING_SIZE_MB || '500', 10) * 1024 * 1024,
   },
   encryption: {
     key: process.env.ENCRYPTION_KEY || '',

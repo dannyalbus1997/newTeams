@@ -74,6 +74,7 @@ export const ROUTES = {
   MEETING_SUMMARY: (id: string) => `/meetings/${id}/summary`,
   UPLOAD: '/upload',
   SEARCH: '/search',
+  MEETING_BOT: '/meeting-bot',
   PROFILE: '/profile',
   SETTINGS: '/settings',
 };

@@ -1,5 +1,5 @@
 import { baseApi } from './baseApi';
-import { Transcript, ApiResponse } from '@/types';
+import { Transcript, ApiResponse, TranscriptionJobStatus } from '@/types';
 
 export interface UploadTranscriptResponse {
   id: string;
@@ -26,6 +26,44 @@ export const transcriptsApi = baseApi.injectEndpoints({
         { type: 'Transcript', id: meetingId },
         { type: 'Meeting', id: meetingId },
       ],
+    }),
+
+    /**
+     * Transcribe a meeting recording using OpenAI Whisper.
+     * Used as a fallback when no native Teams transcript is available.
+     */
+    transcribeWithWhisper: builder.mutation<Transcript, string>({
+      query: (meetingId) => ({
+        url: `/transcripts/${meetingId}/transcribe-whisper`,
+        method: 'POST',
+      }),
+      transformResponse: (response: ApiResponse<Transcript>) => response.data!,
+      invalidatesTags: (_result, _error, meetingId) => [
+        { type: 'Transcript', id: meetingId },
+        { type: 'Meeting', id: meetingId },
+      ],
+    }),
+
+    /**
+     * Smart fetch: tries Microsoft Graph first, falls back to Whisper.
+     */
+    smartFetchTranscript: builder.mutation<Transcript, string>({
+      query: (meetingId) => ({
+        url: `/transcripts/${meetingId}/smart-fetch`,
+        method: 'POST',
+      }),
+      transformResponse: (response: ApiResponse<Transcript>) => response.data!,
+      invalidatesTags: (_result, _error, meetingId) => [
+        { type: 'Transcript', id: meetingId },
+        { type: 'Meeting', id: meetingId },
+      ],
+    }),
+
+    /**
+     * Get the current status of a Whisper transcription job.
+     */
+    getTranscriptionStatus: builder.query<TranscriptionJobStatus, string>({
+      query: (meetingId) => `/transcripts/${meetingId}/transcription-status`,
     }),
 
     deleteTranscript: builder.mutation<void, string>({
@@ -56,6 +94,10 @@ export const {
   useGetTranscriptQuery,
   useLazyGetTranscriptQuery,
   useFetchTranscriptFromMeetingMutation,
+  useTranscribeWithWhisperMutation,
+  useSmartFetchTranscriptMutation,
+  useGetTranscriptionStatusQuery,
+  useLazyGetTranscriptionStatusQuery,
   useDeleteTranscriptMutation,
   useSearchTranscriptQuery,
   useLazySearchTranscriptQuery,

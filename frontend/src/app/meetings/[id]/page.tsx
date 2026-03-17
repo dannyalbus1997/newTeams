@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Box, Stack, Typography, Tabs, Tab, CircularProgress } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import { Box, Stack, Typography, Tabs, Tab, CircularProgress, Chip } from '@mui/material';
 import { useRouter, useParams } from 'next/navigation';
 import MainLayout from '@/components/layout/MainLayout';
 import MeetingDetail from '@/components/meetings/MeetingDetail';
 import TranscriptViewer from '@/components/transcripts/TranscriptViewer';
 import TranscriptUpload from '@/components/transcripts/TranscriptUpload';
+import WhisperTranscriptionPanel from '@/components/transcripts/WhisperTranscriptionPanel';
 import SummaryView from '@/components/summaries/SummaryView';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorAlert from '@/components/common/ErrorAlert';
@@ -14,6 +15,9 @@ import { useGetMeetingByIdQuery } from '@/store/api/meetingsApi';
 import {
   useGetTranscriptQuery,
   useFetchTranscriptFromMeetingMutation,
+  useTranscribeWithWhisperMutation,
+  useSmartFetchTranscriptMutation,
+  useLazyGetTranscriptionStatusQuery,
 } from '@/store/api/transcriptsApi';
 import {
   useGetSummaryQuery,
@@ -23,7 +27,7 @@ import {
 } from '@/store/api/summariesApi';
 import { transcriptsService } from '@/services/transcripts.service';
 import { summariesService } from '@/services/summaries.service';
-import { ActionItem } from '@/types';
+import { ActionItem, TranscriptionJobStatus } from '@/types';
 import { ROUTES } from '@/lib/constants';
 
 interface TabPanelProps {
@@ -58,11 +62,15 @@ export default function MeetingDetailPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploadingTranscript, setIsUploadingTranscript] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [whisperError, setWhisperError] = useState<string | null>(null);
+  const [transcriptionJobStatus, setTranscriptionJobStatus] =
+    useState<TranscriptionJobStatus | null>(null);
 
   // RTK Query hooks (skip request when id is invalid)
   const {
     data: meeting,
     isLoading: isLoadingMeeting,
+    refetch: refetchMeeting,
   } = useGetMeetingByIdQuery(meetingId, { skip: isInvalidId });
 
   const {
@@ -80,17 +88,84 @@ export default function MeetingDetailPage() {
 
   const [fetchTranscriptFromMeeting, { isLoading: isFetchingTranscript }] =
     useFetchTranscriptFromMeetingMutation();
+  const [transcribeWithWhisper, { isLoading: isWhisperTranscribing }] =
+    useTranscribeWithWhisperMutation();
+  const [smartFetchTranscript, { isLoading: isSmartFetching }] =
+    useSmartFetchTranscriptMutation();
   const [generateSummary, { isLoading: isGeneratingSummary }] =
     useGenerateSummaryMutation();
   const [regenerateSummary, { isLoading: isRegenerating }] =
     useRegenerateSummaryMutation();
   const [updateActionItem] = useUpdateActionItemMutation();
+  const [getTranscriptionStatus] = useLazyGetTranscriptionStatusQuery();
+
+  const isTranscribing = isWhisperTranscribing || isSmartFetching;
+
+  // Poll transcription status while a job is active
+  useEffect(() => {
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    if (isTranscribing && meetingId) {
+      pollInterval = setInterval(async () => {
+        try {
+          const result = await getTranscriptionStatus(meetingId).unwrap();
+          setTranscriptionJobStatus(result);
+
+          if (result.status === 'completed' || result.status === 'error') {
+            if (pollInterval) clearInterval(pollInterval);
+            if (result.status === 'completed') {
+              refetchTranscript();
+              refetchMeeting();
+            }
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }, 2000);
+    }
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [isTranscribing, meetingId, getTranscriptionStatus, refetchTranscript, refetchMeeting]);
 
   const handleFetchTranscript = async () => {
     try {
       await fetchTranscriptFromMeeting(meetingId).unwrap();
     } catch (error) {
       console.error('Failed to fetch transcript:', error);
+    }
+  };
+
+  const handleTranscribeWhisper = async () => {
+    setWhisperError(null);
+    setTranscriptionJobStatus(null);
+    try {
+      await transcribeWithWhisper(meetingId).unwrap();
+      refetchTranscript();
+      refetchMeeting();
+    } catch (error: any) {
+      const message =
+        error?.data?.message || error?.message || 'Whisper transcription failed';
+      setWhisperError(message);
+      console.error('Whisper transcription failed:', error);
+    }
+  };
+
+  const handleSmartFetch = async () => {
+    setWhisperError(null);
+    setTranscriptionJobStatus(null);
+    try {
+      await smartFetchTranscript(meetingId).unwrap();
+      refetchTranscript();
+      refetchMeeting();
+    } catch (error: any) {
+      const message =
+        error?.data?.message ||
+        error?.message ||
+        'Smart transcription failed';
+      setWhisperError(message);
+      console.error('Smart fetch failed:', error);
     }
   };
 
@@ -188,6 +263,13 @@ export default function MeetingDetailPage() {
     );
   }
 
+  // Determine transcript source label
+  const transcriptSourceLabel = transcript?.source === 'whisper'
+    ? 'Whisper AI'
+    : transcript?.source === 'manual_upload'
+      ? 'Manual Upload'
+      : 'Microsoft Teams';
+
   return (
     <MainLayout>
       <Stack spacing={3}>
@@ -198,7 +280,7 @@ export default function MeetingDetailPage() {
             sx={{ cursor: 'pointer', color: 'primary.main', '&:hover': { textDecoration: 'underline' }, fontWeight: 700, mb: 1 }}
             onClick={() => router.push(ROUTES.MEETINGS)}
           >
-            ← Meetings
+            &larr; Meetings
           </Typography>
         </Box>
 
@@ -209,13 +291,32 @@ export default function MeetingDetailPage() {
           onViewSummary={() => setTabValue(2)}
           onFetchTranscript={handleFetchTranscript}
           onGenerateSummary={handleGenerateSummary}
+          onTranscribeWhisper={handleTranscribeWhisper}
+          onSmartFetch={handleSmartFetch}
+          isTranscribing={isTranscribing}
         />
 
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)}>
             <Tab label="Details" id="tab-0" aria-controls="tabpanel-0" />
-            <Tab label="Transcript" id="tab-1" aria-controls="tabpanel-1" />
+            <Tab
+              label={
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  Transcript
+                  {transcript && (
+                    <Chip
+                      label={transcriptSourceLabel}
+                      size="small"
+                      color={transcript.source === 'whisper' ? 'secondary' : 'default'}
+                      sx={{ height: 20, fontSize: '0.65rem' }}
+                    />
+                  )}
+                </Box>
+              }
+              id="tab-1"
+              aria-controls="tabpanel-1"
+            />
             <Tab label="Summary" id="tab-2" aria-controls="tabpanel-2" />
           </Tabs>
         </Box>
@@ -230,6 +331,22 @@ export default function MeetingDetailPage() {
             />
           )}
 
+          {/* Whisper Transcription Panel — show when no transcript exists */}
+          {!transcript && !isLoadingTranscript && (
+            <Box mb={2}>
+              <WhisperTranscriptionPanel
+                meeting={meeting}
+                onTranscribeWhisper={handleTranscribeWhisper}
+                onSmartFetch={handleSmartFetch}
+                isTranscribing={isTranscribing}
+                transcriptionStatus={transcriptionJobStatus}
+                error={whisperError}
+                onRetry={handleSmartFetch}
+                onDismissError={() => setWhisperError(null)}
+              />
+            </Box>
+          )}
+
           {!transcript && !isLoadingTranscript && meeting.transcriptStatus === 'pending' && (
             <Box textAlign="center" py={4}>
               <CircularProgress />
@@ -239,13 +356,15 @@ export default function MeetingDetailPage() {
             </Box>
           )}
 
-          {!transcript && !isLoadingTranscript && meeting.transcriptStatus === 'unavailable' && (
-            <TranscriptUpload
-              onUpload={handleUploadTranscript}
-              isLoading={isUploadingTranscript}
-              uploadProgress={uploadProgress}
-              error={uploadError}
-            />
+          {!transcript && !isLoadingTranscript && !isTranscribing && (
+            <Box mt={2}>
+              <TranscriptUpload
+                onUpload={handleUploadTranscript}
+                isLoading={isUploadingTranscript}
+                uploadProgress={uploadProgress}
+                error={uploadError}
+              />
+            </Box>
           )}
 
           {transcript && (

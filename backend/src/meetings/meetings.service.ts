@@ -97,6 +97,8 @@ export class MeetingsService {
           user.microsoftId,
         ),
       ]);
+      console.log('onlineMeetings', onlineMeetings);
+      console.log('calendarEvents', calendarEvents);
 
       let syncedCount = 0;
 
@@ -111,10 +113,17 @@ export class MeetingsService {
       for (const event of teamsCalendarEvents) {
         const eventStart = new Date(event.start.dateTime).getTime();
         const eventJoinUrl = event.onlineMeetingUrl || (event as any).onlineMeeting?.joinUrl;
+
+        // Match calendar events to online meetings using decoded URL comparison
+        // and subject + time fallback
+        const normalizeUrl = (url: string | undefined) =>
+          url ? decodeURIComponent(url).toLowerCase().trim() : '';
+
         const matchingOnlineMeeting =
           (eventJoinUrl &&
             onlineMeetings.find(
-              (om: any) => (om.joinWebUrl || om.joinUrl) === eventJoinUrl,
+              (om: any) =>
+                normalizeUrl(om.joinWebUrl || om.joinUrl) === normalizeUrl(eventJoinUrl),
             )) ||
           onlineMeetings.find(
             (om: any) =>
@@ -153,7 +162,11 @@ export class MeetingsService {
             })) || [],
             startDateTime: new Date(event.start.dateTime),
             endDateTime: new Date(event.end.dateTime),
-            joinUrl: event.onlineMeetingUrl || undefined,
+            joinUrl:
+              eventJoinUrl ||
+              matchingOnlineMeeting?.joinWebUrl ||
+              matchingOnlineMeeting?.joinUrl ||
+              undefined,
             hasTranscript: hasTranscript,
             hasRecording: recordingAvailable,
             transcriptStatus: hasTranscript ? TranscriptStatus.AVAILABLE : TranscriptStatus.NONE,

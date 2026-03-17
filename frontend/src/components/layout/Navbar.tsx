@@ -22,6 +22,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SearchIcon from '@mui/icons-material/Search';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useRouter } from 'next/navigation';
@@ -34,6 +35,7 @@ import { ROUTES } from '@/lib/constants';
 const navItems = [
   { label: 'Dashboard', icon: DashboardIcon, href: ROUTES.DASHBOARD },
   { label: 'Meetings', icon: MeetingRoomIcon, href: ROUTES.MEETINGS },
+  { label: 'Bot', icon: SmartToyIcon, href: ROUTES.MEETING_BOT },
   { label: 'Upload', icon: CloudUploadIcon, href: ROUTES.UPLOAD },
   { label: 'Search', icon: SearchIcon, href: ROUTES.SEARCH },
 ];

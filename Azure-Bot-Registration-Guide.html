@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Azure Bot Registration Guide — Teams Meeting Bot</title>
+<style>
+  @media print { body { margin: 0.75in; } .no-print { display: none; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #201F1E; line-height: 1.6; max-width: 860px; margin: 0 auto; padding: 40px 24px; background: #fff; }
+  h1 { font-size: 28px; font-weight: 700; color: #0078D4; margin-bottom: 8px; }
+  h2 { font-size: 22px; font-weight: 700; color: #201F1E; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #0078D4; }
+  h3 { font-size: 17px; font-weight: 600; color: #323130; margin: 24px 0 8px; }
+  p { margin: 8px 0; }
+  .subtitle { color: #605E5C; font-size: 14px; margin-bottom: 32px; }
+  .step-box { background: #F3F2F1; border-left: 4px solid #0078D4; border-radius: 4px; padding: 16px 20px; margin: 16px 0; }
+  .step-num { display: inline-block; background: #0078D4; color: #fff; width: 28px; height: 28px; border-radius: 50%; text-align: center; line-height: 28px; font-weight: 700; font-size: 14px; margin-right: 10px; }
+  .warning { background: #FFF4CE; border-left: 4px solid #FFB900; border-radius: 4px; padding: 12px 16px; margin: 12px 0; }
+  .warning strong { color: #7A6400; }
+  .success { background: #DFF6DD; border-left: 4px solid #107C10; border-radius: 4px; padding: 12px 16px; margin: 12px 0; }
+  .success strong { color: #0B6A0B; }
+  .error-box { background: #FDE7E0; border-left: 4px solid #D83B01; border-radius: 4px; padding: 12px 16px; margin: 12px 0; }
+  .error-box strong { color: #D83B01; }
+  code { background: #F3F2F1; padding: 2px 6px; border-radius: 3px; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; }
+  pre { background: #1E1E1E; color: #D4D4D4; padding: 16px; border-radius: 6px; overflow-x: auto; margin: 12px 0; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 13px; line-height: 1.5; }
+  pre .comment { color: #6A9955; }
+  pre .string { color: #CE9178; }
+  pre .keyword { color: #569CD6; }
+  ol, ul { margin: 8px 0 8px 28px; }
+  li { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  th { background: #0078D4; color: #fff; text-align: left; padding: 10px 14px; font-weight: 600; }
+  td { border: 1px solid #E1DFDD; padding: 10px 14px; }
+  tr:nth-child(even) td { background: #FAF9F8; }
+  .path { color: #0078D4; font-weight: 600; }
+  hr { border: none; border-top: 1px solid #E1DFDD; margin: 32px 0; }
+  .toc { background: #F3F2F1; padding: 20px 24px; border-radius: 6px; margin: 20px 0; }
+  .toc a { color: #0078D4; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc li { margin: 6px 0; padding-left: 16px; border-left: 2px solid #E1DFDD; }
+  img.icon { width: 20px; height: 20px; vertical-align: middle; margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Azure Bot Registration Guide</h1>
+<p class="subtitle">Fix error <code>7503: Application is not registered in our store</code> — Register your Azure AD app as a Teams Bot so it can join meetings and record audio.</p>
+
+<div class="toc">
+  <strong>Contents</strong>
+  <ul>
+    <li><a href="#prereqs">Prerequisites</a></li>
+    <li><a href="#step1">Step 1 — Create an Azure Bot resource</a></li>
+    <li><a href="#step2">Step 2 — Enable the Microsoft Teams channel</a></li>
+    <li><a href="#step3">Step 3 — Add Graph API permissions</a></li>
+    <li><a href="#step4">Step 4 — Grant admin consent</a></li>
+    <li><a href="#step5">Step 5 — Set up ngrok for local development</a></li>
+    <li><a href="#step6">Step 6 — Update your .env configuration</a></li>
+    <li><a href="#step7">Step 7 — Test the bot</a></li>
+    <li><a href="#troubleshooting">Troubleshooting</a></li>
+  </ul>
+</div>
+
+<div class="error-box">
+  <strong>The error you're seeing:</strong><br>
+  <code>7503 — "Application is not registered in our store."</code><br>
+  This means Microsoft's calling infrastructure doesn't recognize your app as a Bot. The steps below will fix this.
+</div>
+
+<hr>
+
+<h2 id="prereqs">Prerequisites</h2>
+<p>Before you begin, make sure you have:</p>
+<ul>
+  <li>An <strong>Azure account</strong> with an active subscription</li>
+  <li>An existing <strong>Azure AD App Registration</strong> (the one your backend uses — <code>AZURE_CLIENT_ID</code>)</li>
+  <li><strong>Tenant admin access</strong> (needed to grant API permissions)</li>
+  <li><strong>ngrok</strong> installed for local development — your current URL: <code>https://351f-115-186-174-60.ngrok-free.app</code></li>
+</ul>
+
+<hr>
+
+<h2 id="step1">Step 1 — Create an Azure Bot Resource</h2>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> Go to <a href="https://portal.azure.com" target="_blank">portal.azure.com</a></p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> In the search bar at the top, type <strong>"Azure Bot"</strong> and click <strong>Azure Bot</strong> under Services.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">3</span> Click <strong>+ Create</strong></p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">4</span> Fill in the creation form:</p>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Bot handle</td><td><code>teams-meeting-assistant-bot</code> (or any unique name)</td></tr>
+    <tr><td>Subscription</td><td>Your Azure subscription</td></tr>
+    <tr><td>Resource group</td><td>Same resource group as your app registration (or create new)</td></tr>
+    <tr><td>Data residency</td><td>Global (or your preferred region)</td></tr>
+    <tr><td>Pricing tier</td><td><strong>F0 (Free)</strong> — sufficient for development</td></tr>
+    <tr><td>Type of App</td><td><strong>Multi Tenant</strong></td></tr>
+    <tr><td>Creation type</td><td><strong>Use existing app registration</strong></td></tr>
+    <tr><td>App ID</td><td>Your <code>AZURE_CLIENT_ID</code> value from <code>.env</code></td></tr>
+    <tr><td>App tenant ID</td><td>Your <code>AZURE_TENANT_ID</code> value from <code>.env</code></td></tr>
+  </table>
+</div>
+
+<div class="warning">
+  <strong>Important:</strong> Select <strong>"Use existing app registration"</strong> — do NOT create a new one. You must use the same <code>AZURE_CLIENT_ID</code> that your backend is already configured with.
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">5</span> Click <strong>Review + Create</strong>, then <strong>Create</strong>. Wait for deployment to complete.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">6</span> Once deployed, click <strong>"Go to resource"</strong>.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">7</span> In the left sidebar, click <strong>Configuration</strong>. Set the <strong>Messaging endpoint</strong> to:</p>
+  <pre><span class="string">https://351f-115-186-174-60.ngrok-free.app/api/meeting-bot/callback</span></pre>
+  <p>Then click <strong>Apply</strong>.</p>
+</div>
+
+<div class="warning">
+  <strong>Note:</strong> The ngrok URL changes every time you restart ngrok (on the free plan). You'll need to update this messaging endpoint each time. For production, use your real HTTPS domain.
+</div>
+
+<hr>
+
+<h2 id="step2">Step 2 — Enable the Microsoft Teams Channel</h2>
+
+<p>This is the step that registers your app in the "Bot Framework store" — the exact thing the 7503 error says is missing.</p>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> In your Azure Bot resource, click <strong>Channels</strong> in the left sidebar.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> Under "Available channels", find <strong>Microsoft Teams</strong> and click on it.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">3</span> On the configuration page:</p>
+  <ul>
+    <li>Accept the <strong>Terms of Service</strong></li>
+    <li>Under "Calling" tab, check <strong>"Enable calling"</strong></li>
+    <li>Set the <strong>Webhook URL</strong> to: <code>https://351f-115-186-174-60.ngrok-free.app/api/meeting-bot/callback</code></li>
+  </ul>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">4</span> Click <strong>Apply</strong> / <strong>Save</strong>.</p>
+</div>
+
+<div class="success">
+  <strong>This is the critical step.</strong> Once Teams channel is enabled, your app is registered in the Bot Framework store and the 7503 error will be resolved.
+</div>
+
+<hr>
+
+<h2 id="step3">Step 3 — Add Graph API Permissions</h2>
+
+<p>Your app needs specific application permissions to join calls and access media.</p>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> Go to <span class="path">Azure Portal → Azure Active Directory → App registrations</span></p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> Find and click your app (the one matching <code>AZURE_CLIENT_ID</code>).</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">3</span> Click <strong>API permissions</strong> in the left sidebar.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">4</span> Click <strong>+ Add a permission</strong> → <strong>Microsoft Graph</strong> → <strong>Application permissions</strong>.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">5</span> Search for and add each of these permissions:</p>
+  <table>
+    <tr><th>Permission</th><th>Purpose</th></tr>
+    <tr><td><code>Calls.JoinGroupCall.All</code></td><td>Bot can join group calls / meetings</td></tr>
+    <tr><td><code>Calls.InitiateGroupCall.All</code></td><td>Bot can create outbound calls</td></tr>
+    <tr><td><code>Calls.AccessMedia.All</code></td><td>Bot can access audio/video streams</td></tr>
+    <tr><td><code>OnlineMeetings.Read.All</code></td><td>Bot can read meeting info &amp; recordings</td></tr>
+    <tr><td><code>OnlineMeetings.ReadWrite.All</code></td><td>Bot can manage online meetings</td></tr>
+  </table>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">6</span> Click <strong>Add permissions</strong> after selecting all five.</p>
+</div>
+
+<div class="warning">
+  <strong>Check existing permissions too.</strong> You should already have some delegated permissions for user login. Keep those — just make sure the five application permissions above are also added.
+</div>
+
+<hr>
+
+<h2 id="step4">Step 4 — Grant Admin Consent</h2>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> Still on the <strong>API permissions</strong> page, click the <strong>"Grant admin consent for [your tenant]"</strong> button at the top.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> Click <strong>Yes</strong> to confirm.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">3</span> Verify all permissions show a <strong>green checkmark</strong> under "Status" saying <strong>"Granted for [tenant]"</strong>.</p>
+</div>
+
+<div class="warning">
+  <strong>You must be a tenant admin</strong> to grant consent. If you're not, ask your IT admin to click this button for you. Without admin consent, the permissions won't work even though they're listed.
+</div>
+
+<hr>
+
+<h2 id="step5">Step 5 — Set Up ngrok for Local Development</h2>
+
+<p>Microsoft Graph needs to send call notifications to your backend over HTTPS. ngrok creates a public tunnel to your local server.</p>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> You already have ngrok running:</p>
+  <pre>ngrok http 3001</pre>
+  <p>Your current public URL: <code>https://351f-115-186-174-60.ngrok-free.app</code></p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> Make sure these three places all use the <strong>same ngrok URL</strong>:</p>
+  <table>
+    <tr><th>Location</th><th>Value</th></tr>
+    <tr><td>Azure Bot → Configuration → Messaging endpoint</td><td><code>https://351f-...ngrok-free.app/api/meeting-bot/callback</code></td></tr>
+    <tr><td>Azure Bot → Channels → Teams → Calling webhook</td><td><code>https://351f-...ngrok-free.app/api/meeting-bot/callback</code></td></tr>
+    <tr><td>Your <code>.env</code> → <code>BOT_CALLBACK_URL</code></td><td><code>https://351f-...ngrok-free.app/api/meeting-bot/callback</code></td></tr>
+  </table>
+</div>
+
+<div class="warning">
+  <strong>Free ngrok URLs change on restart.</strong> Every time you restart ngrok, you'll get a new URL and need to update all three locations above. Consider upgrading to a paid ngrok plan for a stable subdomain, or use <code>devtunnel</code> from Microsoft.
+</div>
+
+<hr>
+
+<h2 id="step6">Step 6 — Update Your .env Configuration</h2>
+
+<p>Your backend configuration file already has the <code>botCallbackUrl</code> set. Verify your <code>.env</code> file has these values:</p>
+
+<pre><span class="comment"># Azure AD (should already be set)</span>
+AZURE_CLIENT_ID=<span class="string">your-client-id-here</span>
+AZURE_CLIENT_SECRET=<span class="string">your-client-secret-here</span>
+AZURE_TENANT_ID=<span class="string">your-tenant-id-here</span>
+
+<span class="comment"># Bot callback URL (update when ngrok URL changes)</span>
+BOT_CALLBACK_URL=<span class="string">https://351f-115-186-174-60.ngrok-free.app/api/meeting-bot/callback</span></pre>
+
+<p>Then <strong>restart your backend server</strong> so it picks up the new config:</p>
+<pre>npm run start:dev</pre>
+
+<hr>
+
+<h2 id="step7">Step 7 — Test the Bot</h2>
+
+<div class="step-box">
+  <p><span class="step-num">1</span> Start a Teams meeting (or use a scheduled meeting with a join URL).</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">2</span> Go to your app's <strong>Meeting Bot</strong> page (<code>/meeting-bot</code>).</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">3</span> Paste the Teams meeting join URL and click <strong>"Join Meeting &amp; Record"</strong>.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">4</span> Check your ngrok terminal — you should see incoming POST requests to <code>/api/meeting-bot/callback</code>.</p>
+</div>
+
+<div class="step-box">
+  <p><span class="step-num">5</span> The bot should appear as a participant in the Teams meeting within 10-15 seconds.</p>
+</div>
+
+<div class="success">
+  <strong>If the bot joins successfully,</strong> the full pipeline is: Join → Record → (when you click Stop or meeting ends) → Download recording → Whisper transcription → GPT-4o summary. All automatic.
+</div>
+
+<hr>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3>Error 7503 still appearing</h3>
+<div class="step-box">
+  <p>Wait 5-10 minutes after enabling the Teams channel. Bot registration can take a few minutes to propagate through Microsoft's systems. Then restart your backend and try again.</p>
+</div>
+
+<h3>Error 403 / Forbidden</h3>
+<div class="step-box">
+  <p>Admin consent hasn't been granted. Go back to Step 4 and click "Grant admin consent." Every permission should show a green checkmark.</p>
+</div>
+
+<h3>Error 401 / Unauthorized</h3>
+<div class="step-box">
+  <p>Your <code>AZURE_CLIENT_SECRET</code> may have expired. Go to your App Registration → Certificates &amp; secrets → create a new client secret → update your <code>.env</code> file.</p>
+</div>
+
+<h3>Bot joins but no recording</h3>
+<div class="step-box">
+  <p>The <code>Calls.AccessMedia.All</code> permission requires a <strong>Teams policy update</strong> in some tenants. Your Teams admin may need to create a policy that allows application-hosted media bots. Run this in PowerShell:</p>
+  <pre><span class="keyword">New-CsApplicationAccessPolicy</span> <span class="string">-Identity</span> "MeetingBot-Policy" <span class="string">-AppIds</span> "YOUR_CLIENT_ID" <span class="string">-Description</span> "Allow meeting bot"
+<span class="keyword">Grant-CsApplicationAccessPolicy</span> <span class="string">-PolicyName</span> "MeetingBot-Policy" <span class="string">-Global</span></pre>
+</div>
+
+<h3>Callback not receiving notifications</h3>
+<div class="step-box">
+  <p>Check that:</p>
+  <ul>
+    <li>ngrok is running and the URL matches what's in Azure Bot configuration</li>
+    <li>Your backend is running on port 3001</li>
+    <li>The <code>/api/meeting-bot/callback</code> endpoint returns 200 OK (test with <code>curl -X POST https://351f-...ngrok-free.app/api/meeting-bot/callback</code>)</li>
+  </ul>
+</div>
+
+<hr>
+<p style="color: #A19F9D; font-size: 12px; text-align: center; margin-top: 40px;">
+  Generated for Teams Meeting Summary project &bull; Your ngrok URL: https://351f-115-186-174-60.ngrok-free.app
+</p>
+
+</body>
+</html>

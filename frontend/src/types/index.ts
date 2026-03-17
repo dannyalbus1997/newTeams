@@ -29,11 +29,33 @@ export interface Participant {
 }
 
 export enum TranscriptStatus {
+  NONE = 'none',
+  AVAILABLE = 'available',
+  FETCHED = 'fetched',
   PENDING = 'pending',
   PROCESSING = 'processing',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  ERROR = 'error',
   UNAVAILABLE = 'unavailable',
+}
+
+export enum TranscriptSourceType {
+  MICROSOFT = 'microsoft',
+  MANUAL_UPLOAD = 'manual_upload',
+  WHISPER = 'whisper',
+}
+
+export interface TranscriptionJobStatus {
+  hasActiveJob: boolean;
+  meetingId: string;
+  status: 'pending' | 'downloading' | 'transcribing' | 'processing' | 'completed' | 'error';
+  progress: number;
+  message: string;
+  estimatedTimeRemaining?: number;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
 }
 
 export enum SummaryStatus {
@@ -67,7 +89,7 @@ export interface Meeting {
  */
 export interface TranscriptEntry {
   speaker: string;
-  timestamp: number;
+  timestamp: string;
   text: string;
 }
 
@@ -153,6 +175,65 @@ export interface Summary {
   version: string;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Meeting Bot Types
+ */
+export enum BotSessionStatus {
+  INITIALIZING = 'initializing',
+  JOINED = 'joined',
+  RECORDING = 'recording',
+  RECORDING_COMPLETE = 'recording_complete',
+  TRANSCRIBING = 'transcribing',
+  SUMMARIZING = 'summarizing',
+  COMPLETED = 'completed',
+  ERROR = 'error',
+  CANCELLED = 'cancelled',
+}
+
+export interface BotSession {
+  _id: string;
+  userId: string;
+  meetingId?: string;
+  callId?: string;
+  microsoftMeetingId: string;
+  joinUrl: string;
+  botDisplayName: string;
+  status: BotSessionStatus;
+  recordingFilePath?: string;
+  recordingSize?: number;
+  recordingDuration?: number;
+  transcriptId?: string;
+  progressMessage: string;
+  progressPercent: number;
+  errorMessage?: string;
+  joinedAt?: string;
+  recordingStartedAt?: string;
+  recordingEndedAt?: string;
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JoinMeetingRequest {
+  joinUrl: string;
+  botDisplayName?: string;
+  meetingId?: string;
+  autoTranscribe?: boolean;
+  autoSummarize?: boolean;
+}
+
+export interface JoinMeetingResponse {
+  sessionId: string;
+  status: BotSessionStatus;
+  message: string;
+  joinUrl: string;
+}
+
+export interface BotSessionHistoryResponse {
+  sessions: BotSession[];
+  total: number;
 }
 
 /**

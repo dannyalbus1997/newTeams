@@ -20,6 +20,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  CircularProgress,
 } from '@mui/material';
 import { Meeting } from '@/types';
 import {
@@ -33,6 +34,8 @@ import PersonIcon from '@mui/icons-material/Person';
 import EmailIcon from '@mui/icons-material/Email';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LinkIcon from '@mui/icons-material/Link';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import VideocamIcon from '@mui/icons-material/Videocam';
 
 interface MeetingDetailProps {
   meeting: Meeting;
@@ -40,6 +43,11 @@ interface MeetingDetailProps {
   onViewSummary: () => void;
   onFetchTranscript?: () => void;
   onGenerateSummary?: () => void;
+  onTranscribeWhisper?: () => void;
+  onSmartFetch?: () => void;
+  onSendBot?: () => void;
+  isTranscribing?: boolean;
+  isBotJoining?: boolean;
 }
 
 export default function MeetingDetail({
@@ -48,6 +56,11 @@ export default function MeetingDetail({
   onViewSummary,
   onFetchTranscript,
   onGenerateSummary,
+  onTranscribeWhisper,
+  onSmartFetch,
+  onSendBot,
+  isTranscribing = false,
+  isBotJoining = false,
 }: MeetingDetailProps) {
   const [joinUrlOpen, setJoinUrlOpen] = useState(false);
   const duration = calculateDuration(
@@ -59,6 +72,11 @@ export default function MeetingDetail({
     meeting.transcriptStatus === 'completed' &&
     (meeting.summaryStatus === 'not_generated' || meeting.summaryStatus === 'failed');
 
+  const showWhisperButton =
+    meeting.hasRecording &&
+    meeting.transcriptStatus !== 'completed' &&
+    meeting.transcriptStatus !== 'processing';
+
   return (
     <>
       <Card>
@@ -69,7 +87,18 @@ export default function MeetingDetail({
               <Typography variant="h4" sx={{ fontWeight: 700, flex: 1 }}>
                 {meeting.subject}
               </Typography>
-              <StatusChip status={meeting.summaryStatus} size="small" />
+              <Stack direction="row" spacing={1} alignItems="center">
+                {meeting.hasRecording && (
+                  <Chip
+                    icon={<VideocamIcon />}
+                    label="Recording"
+                    size="small"
+                    color="info"
+                    variant="outlined"
+                  />
+                )}
+                <StatusChip status={meeting.summaryStatus} size="small" />
+              </Stack>
             </Box>
             <Typography variant="body2" color="textSecondary">
               {formatDateTime(meeting.startDateTime)} • {formatDuration(duration)}
@@ -203,11 +232,67 @@ export default function MeetingDetail({
               color="primary"
               fullWidth
               onClick={onFetchTranscript}
-              disabled={meeting.transcriptStatus === 'pending' || meeting.transcriptStatus === 'processing'}
+              disabled={meeting.transcriptStatus === 'pending' || meeting.transcriptStatus === 'processing' || isTranscribing}
             >
               {meeting.transcriptStatus === 'completed' || meeting.transcriptStatus === 'fetched'
                 ? 'Re-fetch Transcript'
                 : 'Fetch Transcript'}
+            </Button>
+          )}
+
+          {/* Whisper transcription button */}
+          {showWhisperButton && onSmartFetch && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={onSmartFetch}
+              disabled={isTranscribing}
+              startIcon={
+                isTranscribing ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <SmartToyIcon />
+                )
+              }
+              sx={{
+                borderColor: '#6264A7',
+                color: '#6264A7',
+                '&:hover': {
+                  borderColor: '#5558A0',
+                  backgroundColor: 'rgba(98, 100, 167, 0.04)',
+                },
+              }}
+            >
+              {isTranscribing
+                ? 'Transcribing...'
+                : 'Smart Transcribe (AI)'}
+            </Button>
+          )}
+
+          {/* Send Bot to record meeting */}
+          {meeting.joinUrl && onSendBot && (
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={onSendBot}
+              disabled={isBotJoining}
+              startIcon={
+                isBotJoining ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <SmartToyIcon />
+                )
+              }
+              sx={{
+                borderColor: '#0078D4',
+                color: '#0078D4',
+                '&:hover': {
+                  borderColor: '#106EBE',
+                  backgroundColor: 'rgba(0, 120, 212, 0.04)',
+                },
+              }}
+            >
+              {isBotJoining ? 'Sending Bot...' : 'Send Bot to Record'}
             </Button>
           )}
 

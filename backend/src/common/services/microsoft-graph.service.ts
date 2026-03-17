@@ -145,7 +145,15 @@ export class MicrosoftGraphService {
   }
 
   async getOnlineMeetings(accessToken: string): Promise<OnlineMeeting[]> {
-    return this.getOnlineMeetingsForUser(accessToken, 'me');
+    // Delegated token path
+    try {
+      const client = this.getGraphClient(accessToken);
+      const meetings = await client.api('/me/onlineMeetings').get();
+      return meetings.value as OnlineMeeting[];
+    } catch (error) {
+      this.logger.error('Failed to fetch online meetings', error);
+      return [];
+    }
   }
 
   /** Online meetings for a specific user (use 'me' for delegated or user id for app-only). */
@@ -156,6 +164,7 @@ export class MicrosoftGraphService {
     try {
       const client = this.getGraphClient(accessToken);
       const meetings = await client
+        // App-only (or delegated with explicit user): use /users/{id}/...
         .api(`/users/${userIdentifier}/onlineMeetings`)
         .get();
 
@@ -169,30 +178,66 @@ export class MicrosoftGraphService {
   /**
    * Resolve online meeting id from join URL (e.g. when only calendar event id is stored).
    * Returns the online meeting id or null.
+   *
+   * Tries multiple strategies in order:
+   *  1. Filter by joinWebUrl (beta is most reliable)
+   *  2. List meetings and match by URL comparison (no $top; some tenants reject it)
    */
   async getOnlineMeetingIdByJoinUrl(
     accessToken: string,
-    joinWebUrl: string,
+    joinWebUrl?: string,
   ): Promise<string | null> {
     if (!joinWebUrl) return null;
+
+    const client = this.getGraphClient(accessToken);
+
+    // Strategy 1: Filter by joinWebUrl (beta)
     try {
-      const client = this.getGraphClient(accessToken);
       const escaped = joinWebUrl.replace(/'/g, "''");
       const result = await client
         .api('/me/onlineMeetings')
+        .version('beta')
         .query({ $filter: `joinWebUrl eq '${escaped}'` })
         .get();
       const meetings = result?.value as OnlineMeeting[] | undefined;
-      return meetings?.length ? meetings[0].id : null;
+      if (meetings?.length) {
+        this.logger.log(`Resolved online meeting ID via filter: ${meetings[0].id}`);
+        return meetings[0].id;
+      }
     } catch (error) {
-      this.logger.debug('Could not resolve online meeting by joinUrl', error);
-      return null;
+      this.logger.debug('Strategy 1 (filter) failed for joinUrl resolution', error);
     }
+
+    // Strategy 2: List meetings and match by decoded URL comparison
+    try {
+      const decodedTarget = decodeURIComponent(joinWebUrl).toLowerCase();
+      const result = await client
+        .api('/me/onlineMeetings')
+        .version('beta')
+        .get();
+
+      const meetings = result?.value as OnlineMeeting[] | undefined;
+      if (meetings?.length) {
+        const match = meetings.find((m) => {
+          const mUrl = m.joinWebUrl || m.joinUrl || '';
+          return decodeURIComponent(mUrl).toLowerCase() === decodedTarget;
+        });
+        if (match) {
+          this.logger.log(`Resolved online meeting ID via URL comparison: ${match.id}`);
+          return match.id;
+        }
+      }
+    } catch (error) {
+      this.logger.debug('Strategy 2 (URL comparison) failed for joinUrl resolution', error);
+    }
+
+    this.logger.warn(`Could not resolve online meeting ID for joinUrl: ${joinWebUrl}`);
+    return null;
   }
 
   async getMeetingTranscripts(
     accessToken: string,
-    meetingId: string,
+    meetingId?: string,
   ): Promise<Transcript[]> {
     try {
       const client = this.getGraphClient(accessToken);

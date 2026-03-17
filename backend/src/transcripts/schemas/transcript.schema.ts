@@ -6,12 +6,55 @@ export type TranscriptDocument = Transcript & Document;
 export enum TranscriptSource {
   MICROSOFT = 'microsoft',
   MANUAL_UPLOAD = 'manual_upload',
+  WHISPER = 'whisper',
 }
 
-interface StructuredEntry {
+export interface StructuredEntry {
   speaker: string;
   timestamp: string;
   text: string;
+}
+
+export interface ActionItem {
+  description: string;
+  assignee?: string;
+  dueDate?: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+export interface Decision {
+  decision: string;
+  context: string;
+  madeBy?: string;
+}
+
+export interface FollowUp {
+  item: string;
+  responsible?: string;
+  deadline?: string;
+}
+
+export interface MeetingSummary {
+  overview: string;
+  keyDiscussionPoints: Array<{
+    topic: string;
+    details: string;
+    speakers: string[];
+  }>;
+  actionItems: ActionItem[];
+  decisions: Decision[];
+  followUps: FollowUp[];
+  sentiment: {
+    overall: string;
+    score: number;
+  };
+  topics: string[];
+  generatedAt: Date;
+  tokenUsage?: {
+    prompt: number;
+    completion: number;
+    total: number;
+  };
 }
 
 @Schema({
@@ -59,6 +102,12 @@ export class Transcript {
   @Prop({ required: true, index: true })
   wordCount: number;
 
+  @Prop({ type: Object, default: null })
+  summary?: MeetingSummary;
+
+  @Prop({ default: false })
+  isSummarized: boolean;
+
   @Prop({ default: () => new Date() })
   fetchedAt: Date;
 
@@ -74,3 +123,4 @@ export const TranscriptSchema = SchemaFactory.createForClass(Transcript);
 TranscriptSchema.index({ meetingId: 1 });
 TranscriptSchema.index({ userId: 1, createdAt: -1 });
 TranscriptSchema.index({ source: 1 });
+TranscriptSchema.index({ isSummarized: 1 });

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsBoolean } from 'class-validator';
 
 export enum TranscriptFormat {
   TEXT = 'text',
@@ -14,4 +14,8 @@ export class UploadTranscriptDto {
   @IsOptional()
   @IsString()
   language?: string = 'en';
+
+  @IsOptional()
+  @IsBoolean()
+  summarize?: boolean = true;
 }

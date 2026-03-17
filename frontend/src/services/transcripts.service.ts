@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { Transcript, ApiResponse } from '@/types';
+import { Transcript, ApiResponse, TranscriptionJobStatus } from '@/types';
 
 export interface UploadTranscriptResponse {
   id: string;
@@ -34,6 +34,26 @@ class TranscriptsService {
 
   public async deleteTranscript(meetingId: string): Promise<ApiResponse<void>> {
     return apiClient.delete<void>(`/transcripts/${meetingId}`);
+  }
+
+  public async transcribeWithWhisper(
+    meetingId: string,
+  ): Promise<ApiResponse<Transcript>> {
+    return apiClient.post<Transcript>(`/transcripts/${meetingId}/transcribe-whisper`);
+  }
+
+  public async smartFetchTranscript(
+    meetingId: string,
+  ): Promise<ApiResponse<Transcript>> {
+    return apiClient.post<Transcript>(`/transcripts/${meetingId}/smart-fetch`);
+  }
+
+  public async getTranscriptionStatus(
+    meetingId: string,
+  ): Promise<ApiResponse<TranscriptionJobStatus>> {
+    return apiClient.get<TranscriptionJobStatus>(
+      `/transcripts/${meetingId}/transcription-status`,
+    );
   }
 
   public async searchTranscript(
