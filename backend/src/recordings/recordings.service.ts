@@ -32,16 +32,17 @@ export class RecordingsService {
 
   /**
    * Get available recordings for a meeting via Microsoft Graph.
+   * Pass userMicrosoftId to use /users/{id}/... (required for app-only tokens).
    */
   async getRecordings(
     accessToken: string,
     meetingId: string,
+    userMicrosoftId?: string,
   ): Promise<RecordingInfo[]> {
     try {
-      const recordings = await this.microsoftGraphService.getRecordings(
-        accessToken,
-        meetingId,
-      );
+      const recordings = userMicrosoftId
+        ? await this.microsoftGraphService.getRecordingsForUser(accessToken, userMicrosoftId, meetingId)
+        : await this.microsoftGraphService.getRecordings(accessToken, meetingId);
       return recordings.map((r: any) => ({
         id: r.id,
         createdDateTime: r.createdDateTime,
@@ -59,11 +60,13 @@ export class RecordingsService {
   /**
    * Download a specific recording from Microsoft Graph to a temporary file.
    * Returns the file path and metadata. The caller is responsible for cleanup.
+   * Pass userMicrosoftId to use /users/{id}/... (required for app-only tokens).
    */
   async downloadRecording(
     accessToken: string,
     meetingId: string,
     recordingId: string,
+    userMicrosoftId?: string,
   ): Promise<RecordingDownloadResult> {
     this.logger.log(
       `Downloading recording ${recordingId} for meeting ${meetingId}`,
@@ -72,11 +75,13 @@ export class RecordingsService {
     try {
       const client = this.microsoftGraphService.getGraphClient(accessToken);
 
+      const endpoint = userMicrosoftId
+        ? `/users/${userMicrosoftId}/onlineMeetings/${meetingId}/recordings/${recordingId}/content`
+        : `/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`;
+
       // Fetch the recording content as a stream
       const response = await client
-        .api(
-          `/me/onlineMeetings/${meetingId}/recordings/${recordingId}/content`,
-        )
+        .api(endpoint)
         .responseType('arraybuffer' as any)
         .get();
 
@@ -114,12 +119,14 @@ export class RecordingsService {
 
   /**
    * Download the first available recording for a meeting.
+   * Pass userMicrosoftId to use /users/{id}/... (required for app-only tokens).
    */
   async downloadFirstRecording(
     accessToken: string,
     meetingId: string,
+    userMicrosoftId?: string,
   ): Promise<RecordingDownloadResult | null> {
-    const recordings = await this.getRecordings(accessToken, meetingId);
+    const recordings = await this.getRecordings(accessToken, meetingId, userMicrosoftId);
 
     if (!recordings || recordings.length === 0) {
       this.logger.warn(`No recordings found for meeting ${meetingId}`);
@@ -130,6 +137,7 @@ export class RecordingsService {
       accessToken,
       meetingId,
       recordings[0].id,
+      userMicrosoftId,
     );
   }
 
@@ -169,12 +177,14 @@ export class RecordingsService {
 
   /**
    * Check if a meeting has any available recordings.
+   * Pass userMicrosoftId to use /users/{id}/... (required for app-only tokens).
    */
   async hasRecordings(
     accessToken: string,
     meetingId: string,
+    userMicrosoftId?: string,
   ): Promise<boolean> {
-    const recordings = await this.getRecordings(accessToken, meetingId);
+    const recordings = await this.getRecordings(accessToken, meetingId, userMicrosoftId);
     return recordings.length > 0;
   }
 }

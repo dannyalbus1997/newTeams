@@ -29,10 +29,10 @@ export enum BotSessionStatus {
   collection: 'bot_sessions',
 })
 export class BotSession {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Meeting', index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Meeting' })
   meetingId?: Types.ObjectId;
 
   /** The Microsoft Graph call ID returned when the bot joins */

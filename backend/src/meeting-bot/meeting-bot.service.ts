@@ -232,37 +232,40 @@ export class MeetingBotService implements OnModuleDestroy {
       });
 
       const botCallbackUrl = this.configService.get('botCallbackUrl', { infer: true }) as string;
+      const tenantId = this.configService.get('azure.tenantId', { infer: true }) as string;
       this.logger.log(`Using bot callback URL: ${botCallbackUrl}`);
+      this.logger.log(`Using tenant ID: ${tenantId}`);
 
-      const callPayload = {
-        '@odata.type': '#microsoft.graph.call',
-        callbackUri: botCallbackUrl,
-        requestedModalities: ['audio'],
-        mediaConfig: {
-          '@odata.type': '#microsoft.graph.appHostedMediaConfig',
-          blob: '',
-        },
-        chatInfo: {
-          '@odata.type': '#microsoft.graph.chatInfo',
-          threadId: this.extractThreadId(session.joinUrl),
-          messageId: '0',
-        },
-        meetingInfo: {
-          '@odata.type': '#microsoft.graph.organizerMeetingInfo',
-          organizer: {
-            '@odata.type': '#microsoft.graph.identitySet',
-            user: {
-              '@odata.type': '#microsoft.graph.identity',
-              id: session.userId.toString(),
-              displayName: session.botDisplayName,
+      const meetingInfoParsed = this.parseJoinUrl(session.joinUrl);
+
+      // ── Strategy 1: Join via organizerMeetingInfo (requires Oid in URL context) ──
+      // The Teams join URL context parameter contains the organizer's AAD object ID.
+      const joinByOrganizerPayload = meetingInfoParsed.organizerId
+        ? {
+            '@odata.type': '#microsoft.graph.call',
+            callbackUri: botCallbackUrl,
+            requestedModalities: ['audio'],
+            mediaConfig: {
+              '@odata.type': '#microsoft.graph.serviceHostedMediaConfig',
+              preFetchMedia: [],
             },
-          },
-        },
-        tenantId: this.configService.get('azure.tenantId', { infer: true }),
-      };
+            meetingInfo: {
+              '@odata.type': '#microsoft.graph.organizerMeetingInfo',
+              organizer: {
+                '@odata.type': '#microsoft.graph.identitySet',
+                user: {
+                  '@odata.type': '#microsoft.graph.identity',
+                  id: meetingInfoParsed.organizerId,
+                  tenantId: meetingInfoParsed.organizerTenantId || tenantId,
+                },
+              },
+            },
+            tenantId,
+          }
+        : null;
 
-      // Alternative: use joinMeetingUrl for simpler join (available in Graph beta)
-      const joinPayload = {
+      // ── Strategy 2: Join via chatInfo with thread ID ──
+      const joinByChatPayload = {
         '@odata.type': '#microsoft.graph.call',
         callbackUri: botCallbackUrl,
         requestedModalities: ['audio'],
@@ -270,29 +273,40 @@ export class MeetingBotService implements OnModuleDestroy {
           '@odata.type': '#microsoft.graph.serviceHostedMediaConfig',
           preFetchMedia: [],
         },
-        joinMeetingIdSettings: undefined as any,
         chatInfo: {
           '@odata.type': '#microsoft.graph.chatInfo',
-          threadId: this.extractThreadId(session.joinUrl),
+          threadId: meetingInfoParsed.threadId,
           messageId: '0',
         },
-        tenantId: this.configService.get('azure.tenantId', { infer: true }),
+        tenantId,
       };
 
       let callResponse: any;
-      try {
-        callResponse = await client
-          .api('/communications/calls')
-          .post(joinPayload);
-      } catch (joinError: any) {
-        // Fallback: try with the organizer meeting info payload
-        this.logger.warn(
-          'Primary join failed, trying fallback payload...',
-          joinError?.message,
-        );
-        callResponse = await client
-          .api('/communications/calls')
-          .post(callPayload);
+      if (joinByOrganizerPayload) {
+        try {
+          this.logger.log('Attempting to join meeting via organizerMeetingInfo...');
+          callResponse = await client
+            .api('/communications/calls')
+            .post(joinByOrganizerPayload);
+        } catch (joinError: any) {
+          this.logger.warn(
+            `organizerMeetingInfo strategy failed: ${joinError?.message || joinError?.code}. Trying chatInfo strategy...`,
+          );
+        }
+      }
+
+      if (!callResponse) {
+        try {
+          this.logger.log('Attempting to join meeting via chatInfo...');
+          callResponse = await client
+            .api('/communications/calls')
+            .post(joinByChatPayload);
+        } catch (chatError: any) {
+          this.logger.error(
+            `chatInfo join strategy failed: ${chatError?.message || chatError?.code}`,
+          );
+          throw chatError;
+        }
       }
 
       const callId = callResponse.id;
@@ -584,18 +598,27 @@ export class MeetingBotService implements OnModuleDestroy {
         `Could not download recording directly from call: ${error?.message}`,
       );
 
-      // Fallback: try to download via the standard Teams meeting recordings endpoint
+      // Fallback: try to download via the standard Teams meeting recordings endpoint.
+      // App-only tokens cannot use /me/ — we need the organizer's AAD user ID from the join URL.
       try {
         const client = await this.getAppGraphClient();
+        const meetingParsed = this.parseJoinUrl(session.joinUrl);
+        const organizerId = meetingParsed.organizerId;
+
+        if (!organizerId) {
+          this.logger.warn('Cannot fetch recordings: organizer AAD ID not found in join URL context.');
+          return null;
+        }
+
         const recordings = await client
-          .api(`/me/onlineMeetings/${session.microsoftMeetingId}/recordings`)
+          .api(`/users/${organizerId}/onlineMeetings/${session.microsoftMeetingId}/recordings`)
           .get();
 
         if (recordings?.value?.length > 0) {
           const recordingId = recordings.value[0].id;
           const recordingContent = await client
             .api(
-              `/me/onlineMeetings/${session.microsoftMeetingId}/recordings/${recordingId}/content`,
+              `/users/${organizerId}/onlineMeetings/${session.microsoftMeetingId}/recordings/${recordingId}/content`,
             )
             .responseType('arraybuffer' as any)
             .get();
@@ -883,17 +906,37 @@ export class MeetingBotService implements OnModuleDestroy {
   // ─── Helpers ──────────────────────────────────────────────────────────
 
   /**
-   * Parse a Teams join URL to extract the thread ID and other info.
+   * Parse a Teams join URL to extract the thread ID and organizer info.
+   * The URL context parameter contains the organizer's AAD object ID (Oid) and tenant (Tid).
    */
-  private parseJoinUrl(joinUrl: string): { threadId: string; organizerId?: string } {
+  private parseJoinUrl(joinUrl: string): {
+    threadId: string;
+    organizerId?: string;
+    organizerTenantId?: string;
+  } {
     try {
       const decoded = decodeURIComponent(joinUrl);
-      const threadMatch = decoded.match(/19[:%](.+?)@thread/);
+      const threadMatch = decoded.match(/19:(.+?)@thread/);
       const threadId = threadMatch
         ? `19:${threadMatch[1]}@thread.v2`
         : joinUrl;
 
-      return { threadId };
+      let organizerId: string | undefined;
+      let organizerTenantId: string | undefined;
+
+      try {
+        const url = new URL(joinUrl);
+        const contextParam = url.searchParams.get('context');
+        if (contextParam) {
+          const context = JSON.parse(decodeURIComponent(contextParam));
+          organizerId = context.Oid || context.oid;
+          organizerTenantId = context.Tid || context.tid;
+        }
+      } catch {
+        // ignore URL/JSON parse errors
+      }
+
+      return { threadId, organizerId, organizerTenantId };
     } catch {
       return { threadId: joinUrl };
     }

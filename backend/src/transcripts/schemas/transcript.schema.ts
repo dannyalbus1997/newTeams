@@ -62,10 +62,10 @@ export interface MeetingSummary {
   collection: 'transcripts',
 })
 export class Transcript {
-  @Prop({ type: Types.ObjectId, ref: 'Meeting', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'Meeting', required: true })
   meetingId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
   @Prop({ nullable: true })

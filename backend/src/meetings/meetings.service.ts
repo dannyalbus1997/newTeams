@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -12,6 +12,7 @@ import { UsersService } from '@/users/users.service';
 import { AuthService } from '@/auth/auth.service';
 import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service';
 import { PaginatedResponse } from '@/common/interfaces/pagination.interface';
+import { TranscriptsService } from '@/transcripts/transcripts.service';
 
 @Injectable()
 export class MeetingsService {
@@ -22,6 +23,8 @@ export class MeetingsService {
     private usersService: UsersService,
     private authService: AuthService,
     private microsoftGraphService: MicrosoftGraphService,
+    @Inject(forwardRef(() => TranscriptsService))
+    private transcriptsService: TranscriptsService,
   ) {}
 
   /**
@@ -97,8 +100,7 @@ export class MeetingsService {
           user.microsoftId,
         ),
       ]);
-      console.log('onlineMeetings', onlineMeetings);
-      console.log('calendarEvents', calendarEvents);
+      this.logger.debug(`Fetched ${calendarEvents.length} calendar events and ${onlineMeetings.length} online meetings`);
 
       let syncedCount = 0;
 
@@ -130,7 +132,36 @@ export class MeetingsService {
               om.subject === event.subject &&
               Math.abs(new Date(om.startDateTime).getTime() - eventStart) < 60_000,
           );
-        const onlineMeetingId = matchingOnlineMeeting?.id ?? event.id;
+
+        let onlineMeetingId = matchingOnlineMeeting?.id ?? null;
+
+        // If no direct match, resolve via Graph API using the join URL
+        // This avoids storing the calendar event ID (AAMk...) which can't
+        // be used for transcript/recording API calls
+        if (!onlineMeetingId && eventJoinUrl) {
+          try {
+            const resolved = await this.microsoftGraphService.getOnlineMeetingIdByJoinUrl(
+              appAccessToken,
+              eventJoinUrl,
+            );
+            if (resolved) {
+              onlineMeetingId = resolved;
+              this.logger.log(
+                `Resolved online meeting ID from joinUrl for "${event.subject}": ${resolved}`,
+              );
+            }
+          } catch (resolveError) {
+            this.logger.debug(
+              `Could not resolve online meeting ID for "${event.subject}" from joinUrl`,
+              resolveError,
+            );
+          }
+        }
+
+        // Fall back to calendar event ID only if all resolution failed
+        if (!onlineMeetingId) {
+          onlineMeetingId = event.id;
+        }
 
         if (matchingOnlineMeeting && event.id !== onlineMeetingId) {
           await this.meetingModel.updateMany(
@@ -139,11 +170,46 @@ export class MeetingsService {
           );
         }
 
-        const recordingAvailable = onlineMeetings.some(
-          (r: any) => r.id === onlineMeetingId || r.subject === event.subject,
-        );
+        const joinUrl =
+          eventJoinUrl ||
+          matchingOnlineMeeting?.joinWebUrl ||
+          matchingOnlineMeeting?.joinUrl ||
+          undefined;
 
-        const hasTranscript = event.isOnlineMeeting || !!event.onlineMeetingUrl;
+        // Only check recordings/transcripts for past meetings with a real online meeting ID
+        const isPastMeeting = new Date(event.end.dateTime).getTime() < now.getTime();
+        const hasRealMeetingId = !onlineMeetingId.startsWith('AAMk');
+        let hasRecording = false;
+        let hasTranscript = false;
+
+        if (isPastMeeting && hasRealMeetingId) {
+          try {
+            const [recordings, transcriptAvailable] = await Promise.all([
+              this.microsoftGraphService.getRecordingsForUser(
+                appAccessToken,
+                user.microsoftId,
+                onlineMeetingId,
+              ),
+              this.microsoftGraphService.checkTranscriptAvailabilityForUser(
+                appAccessToken,
+                user.microsoftId,
+                onlineMeetingId,
+              ),
+            ]);
+            hasRecording = recordings.length > 0;
+            hasTranscript = transcriptAvailable;
+          } catch (checkError) {
+            this.logger.debug(
+              `Could not check recordings/transcripts for "${event.subject}": ${
+                checkError instanceof Error ? checkError.message : 'Unknown'
+              }`,
+            );
+          }
+        }
+
+        const transcriptStatus = hasTranscript
+          ? TranscriptStatus.AVAILABLE
+          : TranscriptStatus.NONE;
 
         const meeting = await this.meetingModel.findOneAndUpdate(
           { microsoftMeetingId: onlineMeetingId },
@@ -162,14 +228,10 @@ export class MeetingsService {
             })) || [],
             startDateTime: new Date(event.start.dateTime),
             endDateTime: new Date(event.end.dateTime),
-            joinUrl:
-              eventJoinUrl ||
-              matchingOnlineMeeting?.joinWebUrl ||
-              matchingOnlineMeeting?.joinUrl ||
-              undefined,
-            hasTranscript: hasTranscript,
-            hasRecording: recordingAvailable,
-            transcriptStatus: hasTranscript ? TranscriptStatus.AVAILABLE : TranscriptStatus.NONE,
+            joinUrl,
+            hasTranscript,
+            hasRecording,
+            transcriptStatus,
             lastSyncedAt: new Date(),
             updatedAt: new Date(),
           },
@@ -181,11 +243,69 @@ export class MeetingsService {
         }
       }
 
+      // After sync, auto-fetch transcripts/recordings for past meetings in the background
+      this.autoFetchTranscripts(userId).catch((err) =>
+        this.logger.error('Background auto-fetch failed', err),
+      );
+
       return syncedCount;
     } catch (error) {
       this.logger.error(`Failed to sync meetings for user ${userId}`, error);
       throw error;
     }
+  }
+
+  /**
+   * Background: for each past meeting that has a transcript or recording available
+   * but hasn't been processed yet, trigger the smart fetch pipeline (Microsoft
+   * transcript first, Whisper fallback).
+   *
+   * Processes meetings sequentially to avoid flooding the APIs.
+   */
+  private async autoFetchTranscripts(userId: string): Promise<void> {
+    const now = new Date();
+
+    const pendingMeetings = await this.meetingModel.find({
+      userId: new Types.ObjectId(userId),
+      startDateTime: { $lt: now },
+      $or: [
+        { hasTranscript: true },
+        { hasRecording: true },
+      ],
+      transcriptStatus: {
+        $in: [TranscriptStatus.NONE, TranscriptStatus.AVAILABLE],
+      },
+    }).sort({ startDateTime: -1 });
+
+    if (!pendingMeetings.length) {
+      this.logger.log('No meetings need transcript auto-fetch.');
+      return;
+    }
+
+    this.logger.log(
+      `Auto-fetching transcripts for ${pendingMeetings.length} past meeting(s)...`,
+    );
+
+    for (const meeting of pendingMeetings) {
+      try {
+        await this.transcriptsService.fetchOrTranscribe(
+          userId,
+          meeting._id.toString(),
+        );
+        this.logger.log(
+          `Auto-fetched transcript for meeting "${meeting.subject}" (${meeting._id})`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Auto-fetch skipped for "${meeting.subject}" (${meeting._id}): ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+        );
+        // Continue with next meeting — don't let one failure stop the batch
+      }
+    }
+
+    this.logger.log('Auto-fetch transcripts completed.');
   }
 
   async getMeetings(
@@ -381,6 +501,17 @@ export class MeetingsService {
       userId: new Types.ObjectId(userId),
       startDateTime: { $lt: new Date() },
     });
+  }
+
+  async updateMeetingRecordingFlag(
+    userId: string,
+    meetingId: string,
+    hasRecording: boolean,
+  ): Promise<void> {
+    await this.meetingModel.updateOne(
+      { _id: new Types.ObjectId(meetingId), userId: new Types.ObjectId(userId) },
+      { $set: { hasRecording, updatedAt: new Date() } },
+    );
   }
 
   async deleteMeeting(userId: string, meetingId: string): Promise<void> {

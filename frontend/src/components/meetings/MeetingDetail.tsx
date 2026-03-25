@@ -39,6 +39,7 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 
 interface MeetingDetailProps {
   meeting: Meeting;
+  onViewRecording?: () => void;
   onViewTranscript: () => void;
   onViewSummary: () => void;
   onFetchTranscript?: () => void;
@@ -52,6 +53,7 @@ interface MeetingDetailProps {
 
 export default function MeetingDetail({
   meeting,
+  onViewRecording,
   onViewTranscript,
   onViewSummary,
   onFetchTranscript,
@@ -206,6 +208,20 @@ export default function MeetingDetail({
 
         <CardActions sx={{ flexDirection: 'column', gap: 1, padding: 2 }}>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} width="100%">
+            {meeting.hasRecording && onViewRecording && (
+              <Button
+                variant="contained"
+                fullWidth
+                onClick={onViewRecording}
+                startIcon={<VideocamIcon />}
+                sx={{
+                  bgcolor: '#6264A7',
+                  '&:hover': { bgcolor: '#5558A0' },
+                }}
+              >
+                View Recording
+              </Button>
+            )}
             <Button
               variant="contained"
               color="primary"

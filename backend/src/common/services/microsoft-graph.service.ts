@@ -180,8 +180,9 @@ export class MicrosoftGraphService {
    * Returns the online meeting id or null.
    *
    * Tries multiple strategies in order:
-   *  1. Filter by joinWebUrl (beta is most reliable)
-   *  2. List meetings and match by URL comparison (no $top; some tenants reject it)
+   *  1. Filter by joinWebUrl using /users/{organizerId}/... (organizer ID from URL context)
+   *  2. Filter by joinWebUrl using /me/onlineMeetings (delegated, works when caller is organizer)
+   *  3. List all meetings for the organizer and match by decoded URL comparison
    */
   async getOnlineMeetingIdByJoinUrl(
     accessToken: string,
@@ -191,31 +192,70 @@ export class MicrosoftGraphService {
 
     const client = this.getGraphClient(accessToken);
 
-    // Strategy 1: Filter by joinWebUrl (beta)
+    // Extract organizer AAD object ID from the URL context parameter (Oid field)
+    let organizerAadId: string | undefined;
     try {
-      const escaped = joinWebUrl.replace(/'/g, "''");
-      const result = await client
-        .api('/me/onlineMeetings')
-        .version('beta')
-        .query({ $filter: `joinWebUrl eq '${escaped}'` })
-        .get();
-      const meetings = result?.value as OnlineMeeting[] | undefined;
-      if (meetings?.length) {
-        this.logger.log(`Resolved online meeting ID via filter: ${meetings[0].id}`);
-        return meetings[0].id;
+      const url = new URL(joinWebUrl);
+      const contextParam = url.searchParams.get('context');
+      if (contextParam) {
+        const context = JSON.parse(decodeURIComponent(contextParam)) as Record<string, string>;
+        organizerAadId = context.Oid || context.oid;
       }
-    } catch (error) {
-      this.logger.debug('Strategy 1 (filter) failed for joinUrl resolution', error);
+    } catch {
+      // ignore URL/JSON parse errors
     }
 
-    // Strategy 2: List meetings and match by decoded URL comparison
-    try {
-      const decodedTarget = decodeURIComponent(joinWebUrl).toLowerCase();
-      const result = await client
-        .api('/me/onlineMeetings')
-        .version('beta')
-        .get();
+    const escaped = joinWebUrl.replace(/'/g, "''");
+    const decodedTarget = decodeURIComponent(joinWebUrl).toLowerCase();
 
+    // Strategy 1: Filter by joinWebUrl scoped to the organizer's user ID (most reliable)
+    if (organizerAadId) {
+      for (const version of ['v1.0', 'beta'] as const) {
+        try {
+          const apiCall = client
+            .api(`/users/${organizerAadId}/onlineMeetings`)
+            .query({ $filter: `joinWebUrl eq '${escaped}'` });
+
+          if (version === 'beta') apiCall.version('beta');
+
+          const result = await apiCall.get();
+          const meetings = result?.value as OnlineMeeting[] | undefined;
+          if (meetings?.length) {
+            this.logger.log(`Resolved meeting ID via /users/{oid} filter (${version}): ${meetings[0].id}`);
+            return meetings[0].id;
+          }
+        } catch (error) {
+          this.logger.debug(`Strategy 1 (filter, ${version}, /users/{oid}) failed`, error);
+        }
+      }
+    }
+
+    // Strategy 2: Filter by joinWebUrl on /me/onlineMeetings (works when caller is the organizer)
+    for (const version of ['v1.0', 'beta'] as const) {
+      try {
+        const apiCall = client
+          .api('/me/onlineMeetings')
+          .query({ $filter: `joinWebUrl eq '${escaped}'` });
+
+        if (version === 'beta') apiCall.version('beta');
+
+        const result = await apiCall.get();
+        const meetings = result?.value as OnlineMeeting[] | undefined;
+        if (meetings?.length) {
+          this.logger.log(`Resolved meeting ID via /me filter (${version}): ${meetings[0].id}`);
+          return meetings[0].id;
+        }
+      } catch (error) {
+        this.logger.debug(`Strategy 2 (filter, ${version}, /me) failed`, error);
+      }
+    }
+
+    // Strategy 3: List organizer's meetings and match by decoded URL comparison
+    const listEndpoint = organizerAadId
+      ? `/users/${organizerAadId}/onlineMeetings`
+      : '/me/onlineMeetings';
+    try {
+      const result = await client.api(listEndpoint).version('beta').get();
       const meetings = result?.value as OnlineMeeting[] | undefined;
       if (meetings?.length) {
         const match = meetings.find((m) => {
@@ -223,12 +263,12 @@ export class MicrosoftGraphService {
           return decodeURIComponent(mUrl).toLowerCase() === decodedTarget;
         });
         if (match) {
-          this.logger.log(`Resolved online meeting ID via URL comparison: ${match.id}`);
+          this.logger.log(`Resolved meeting ID via URL list comparison: ${match.id}`);
           return match.id;
         }
       }
     } catch (error) {
-      this.logger.debug('Strategy 2 (URL comparison) failed for joinUrl resolution', error);
+      this.logger.debug('Strategy 3 (URL list comparison) failed', error);
     }
 
     this.logger.warn(`Could not resolve online meeting ID for joinUrl: ${joinWebUrl}`);
@@ -262,11 +302,13 @@ export class MicrosoftGraphService {
   ): Promise<string> {
     try {
       const client = this.getGraphClient(accessToken);
-      const transcript = await client
-        .api(`/me/onlineMeetings/${meetingId}/transcripts/${transcriptId}`)
+      const content = await client
+        .api(`/me/onlineMeetings/${meetingId}/transcripts/${transcriptId}/content`)
+        .header('Accept', 'text/vtt')
+        .responseType('text' as any)
         .get();
 
-      return transcript.content || '';
+      return content || '';
     } catch (error) {
       this.logger.error(
         `Failed to fetch transcript content for meeting ${meetingId}`,
@@ -306,10 +348,12 @@ export class MicrosoftGraphService {
   ): Promise<string> {
     try {
       const client = this.getGraphClient(accessToken);
-      const transcript = await client
-        .api(`/users/${userMicrosoftId}/onlineMeetings/${microsoftMeetingId}/transcripts/${transcriptId}`)
+      const content = await client
+        .api(`/users/${userMicrosoftId}/onlineMeetings/${microsoftMeetingId}/transcripts/${transcriptId}/content`)
+        .header('Accept', 'text/vtt')
+        .responseType('text' as any)
         .get();
-      return transcript.content || '';
+      return content || '';
     } catch (error) {
       this.logger.error(
         `Failed to fetch transcript content for meeting ${microsoftMeetingId}`,
@@ -334,6 +378,24 @@ export class MicrosoftGraphService {
     }
   }
 
+  /** App-only: check transcript availability for a specific user's meeting. */
+  async checkTranscriptAvailabilityForUser(
+    accessToken: string,
+    userMicrosoftId: string,
+    meetingId: string,
+  ): Promise<boolean> {
+    try {
+      const transcripts = await this.getMeetingTranscriptsForUser(
+        accessToken,
+        userMicrosoftId,
+        meetingId,
+      );
+      return transcripts && transcripts.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
   async getRecordings(accessToken: string, meetingId: string): Promise<any[]> {
     try {
       const client = this.getGraphClient(accessToken);
@@ -344,6 +406,25 @@ export class MicrosoftGraphService {
       return recordings.value || [];
     } catch (error) {
       this.logger.debug(`No recordings available for meeting ${meetingId}`);
+      return [];
+    }
+  }
+
+  /** App-only: get recordings for a specific user's meeting. */
+  async getRecordingsForUser(
+    accessToken: string,
+    userMicrosoftId: string,
+    meetingId: string,
+  ): Promise<any[]> {
+    try {
+      const client = this.getGraphClient(accessToken);
+      const recordings = await client
+        .api(`/users/${userMicrosoftId}/onlineMeetings/${meetingId}/recordings`)
+        .get();
+
+      return recordings.value || [];
+    } catch (error) {
+      this.logger.debug(`No recordings available for user meeting ${meetingId}`);
       return [];
     }
   }

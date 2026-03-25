@@ -1,10 +1,11 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { OpenAI } from 'openai';
 import { Transcript, TranscriptDocument, TranscriptSource } from './schemas/transcript.schema';
 import { UsersService } from '@/users/users.service';
+import { AuthService } from '@/auth/auth.service';
 import { MeetingsService } from '@/meetings/meetings.service';
 import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service';
 import { RecordingsService } from '@/recordings/recordings.service';
@@ -74,6 +75,8 @@ export class TranscriptsService {
     private transcriptModel: Model<TranscriptDocument>,
     private configService: ConfigService<AppConfig>,
     private usersService: UsersService,
+    private authService: AuthService,
+    @Inject(forwardRef(() => MeetingsService))
     private meetingsService: MeetingsService,
     private microsoftGraphService: MicrosoftGraphService,
     private recordingsService: RecordingsService,
@@ -310,20 +313,24 @@ Important:
       });
       if (existing) return existing;
 
-      const token = await this.usersService.getDecryptedAccessToken(user);
+      // Use app-only token + user-scoped endpoints to avoid /me/ issues
+      const appToken = await this.authService.getAppAccessToken();
 
       // Resolve real Teams online meeting ID if it's a calendar ID (starts with AAMk)
       if (onlineMeetingId.startsWith('AAMk')) {
         if (meeting.joinUrl) {
           const resolved = await this.microsoftGraphService.getOnlineMeetingIdByJoinUrl(
-            token,
+            appToken,
             meeting.joinUrl,
           );
           if (resolved) onlineMeetingId = resolved;
         }
 
         if (onlineMeetingId.startsWith('AAMk')) {
-          const onlineMeetings = await this.microsoftGraphService.getOnlineMeetings(token);
+          const onlineMeetings = await this.microsoftGraphService.getOnlineMeetingsForUser(
+            appToken,
+            user.microsoftId,
+          );
           const startMs = new Date(meeting.startDateTime).getTime();
           const match = onlineMeetings.find(
             (m) =>
@@ -340,15 +347,20 @@ Important:
         }
       }
 
-      // Fetch transcript list
-      const transcripts = await this.microsoftGraphService.getMeetingTranscripts(token, onlineMeetingId);
+      // Fetch transcript list using user-scoped endpoint (works with app token)
+      const transcripts = await this.microsoftGraphService.getMeetingTranscriptsForUser(
+        appToken,
+        user.microsoftId,
+        onlineMeetingId,
+      );
       if (!transcripts?.length) throw new BadRequestException('No transcript available');
 
       const transcriptMeta = transcripts[0];
 
-      // Fetch transcript content
-      const content = await this.microsoftGraphService.getTranscriptContent(
-        token,
+      // Fetch transcript content using user-scoped endpoint
+      const content = await this.microsoftGraphService.getTranscriptContentForUser(
+        appToken,
+        user.microsoftId,
         onlineMeetingId,
         transcriptMeta.id,
       );
@@ -456,7 +468,7 @@ Important:
 
       const meeting = await this.meetingsService.getMeetingById(userId, meetingId);
       let microsoftMeetingId = meeting.microsoftMeetingId;
-      const accessToken = await this.usersService.getDecryptedAccessToken(user);
+      const accessToken = await this.authService.getAppAccessToken();
 
       // Resolve calendar event IDs (AAMk...) to online meeting IDs
       if (microsoftMeetingId.startsWith('AAMk')) {
@@ -499,6 +511,7 @@ Important:
       const recording = await this.recordingsService.downloadFirstRecording(
         accessToken,
         microsoftMeetingId,
+        user.microsoftId,
       );
 
       if (!recording) {
@@ -694,7 +707,7 @@ Important:
 
       const meeting = await this.meetingsService.getMeetingById(userId, meetingId);
       let microsoftMeetingId = meeting.microsoftMeetingId;
-      const accessToken = await this.usersService.getDecryptedAccessToken(user);
+      const accessToken = await this.authService.getAppAccessToken();
 
       if (microsoftMeetingId.startsWith('AAMk')) {
         if (!meeting.joinUrl) {
@@ -717,8 +730,9 @@ Important:
         this.logger.log(`Resolved calendar event to online meeting: ${resolvedId}`);
       }
 
-      const hasNativeTranscript = await this.microsoftGraphService.checkTranscriptAvailability(
+      const hasNativeTranscript = await this.microsoftGraphService.checkTranscriptAvailabilityForUser(
         accessToken,
+        user.microsoftId,
         microsoftMeetingId,
       );
 
@@ -730,6 +744,7 @@ Important:
       const hasRecording = await this.recordingsService.hasRecordings(
         accessToken,
         microsoftMeetingId,
+        user.microsoftId,
       );
 
       if (hasRecording) {

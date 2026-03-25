@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
 import { TranscriptsService } from './transcripts.service';
 import { TranscriptsController } from './transcripts.controller';
 import { Transcript, TranscriptSchema } from './schemas/transcript.schema';
 import { UsersModule } from '@/users/users.module';
+import { AuthModule } from '@/auth/auth.module';
 import { MeetingsModule } from '@/meetings/meetings.module';
 import { RecordingsModule } from '@/recordings/recordings.module';
 import { WhisperModule } from '@/whisper/whisper.module';
@@ -17,7 +18,8 @@ import { MicrosoftGraphService } from '@/common/services/microsoft-graph.service
     ]),
     ConfigModule,
     UsersModule,
-    MeetingsModule,
+    AuthModule,
+    forwardRef(() => MeetingsModule),
     RecordingsModule,
     WhisperModule,
   ],

@@ -9,6 +9,7 @@ import TranscriptViewer from '@/components/transcripts/TranscriptViewer';
 import TranscriptUpload from '@/components/transcripts/TranscriptUpload';
 import WhisperTranscriptionPanel from '@/components/transcripts/WhisperTranscriptionPanel';
 import SummaryView from '@/components/summaries/SummaryView';
+import RecordingPlayer from '@/components/recordings/RecordingPlayer';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorAlert from '@/components/common/ErrorAlert';
 import { useGetMeetingByIdQuery } from '@/store/api/meetingsApi';
@@ -287,8 +288,9 @@ export default function MeetingDetailPage() {
         {/* Meeting Details */}
         <MeetingDetail
           meeting={meeting}
-          onViewTranscript={() => setTabValue(1)}
-          onViewSummary={() => setTabValue(2)}
+          onViewRecording={() => setTabValue(1)}
+          onViewTranscript={() => setTabValue(2)}
+          onViewSummary={() => setTabValue(3)}
           onFetchTranscript={handleFetchTranscript}
           onGenerateSummary={handleGenerateSummary}
           onTranscribeWhisper={handleTranscribeWhisper}
@@ -303,6 +305,23 @@ export default function MeetingDetailPage() {
             <Tab
               label={
                 <Box display="flex" alignItems="center" gap={0.5}>
+                  Recording
+                  {meeting.hasRecording && (
+                    <Chip
+                      label="Available"
+                      size="small"
+                      color="success"
+                      sx={{ height: 20, fontSize: '0.65rem' }}
+                    />
+                  )}
+                </Box>
+              }
+              id="tab-1"
+              aria-controls="tabpanel-1"
+            />
+            <Tab
+              label={
+                <Box display="flex" alignItems="center" gap={0.5}>
                   Transcript
                   {transcript && (
                     <Chip
@@ -314,15 +333,20 @@ export default function MeetingDetailPage() {
                   )}
                 </Box>
               }
-              id="tab-1"
-              aria-controls="tabpanel-1"
+              id="tab-2"
+              aria-controls="tabpanel-2"
             />
-            <Tab label="Summary" id="tab-2" aria-controls="tabpanel-2" />
+            <Tab label="Summary" id="tab-3" aria-controls="tabpanel-3" />
           </Tabs>
         </Box>
 
-        {/* Tab Panels */}
+        {/* Recording Tab */}
         <TabPanel value={tabValue} index={1}>
+          <RecordingPlayer meetingId={meetingId} hasRecording={meeting.hasRecording} />
+        </TabPanel>
+
+        {/* Transcript Tab */}
+        <TabPanel value={tabValue} index={2}>
           {(uploadError || transcriptError) && (
             <ErrorAlert
               error={uploadError || 'Failed to load transcript'}
@@ -372,7 +396,7 @@ export default function MeetingDetailPage() {
           )}
         </TabPanel>
 
-        <TabPanel value={tabValue} index={2}>
+        <TabPanel value={tabValue} index={3}>
           {summaryError && (
             <ErrorAlert error="Failed to load summary" />
           )}

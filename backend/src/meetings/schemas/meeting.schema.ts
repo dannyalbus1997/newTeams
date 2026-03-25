@@ -36,10 +36,10 @@ interface Participant {
   collection: 'meetings',
 })
 export class Meeting {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   microsoftMeetingId: string;
 
   @Prop({ required: true })
@@ -66,7 +66,7 @@ export class Meeting {
   })
   participants: Participant[];
 
-  @Prop({ required: true, index: true })
+  @Prop({ required: true })
   startDateTime: Date;
 
   @Prop({ required: true })

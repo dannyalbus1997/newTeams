@@ -8,10 +8,10 @@ export type UserDocument = User & Document;
   collection: 'users',
 })
 export class User {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   microsoftId: string;
 
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, unique: true })
   email: string;
 
   @Prop({ required: true })
